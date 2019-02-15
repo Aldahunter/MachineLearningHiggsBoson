@@ -1,5 +1,6 @@
 ### Imports ###
-import treefunctions as TF
+import trees.functions as TF
+
 
 
 ### Classes ####

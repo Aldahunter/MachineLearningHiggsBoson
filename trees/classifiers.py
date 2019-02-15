@@ -1,12 +1,7 @@
 ### Imports ###
 import numpy as np
 
-import treefunctions as TF
-
-
-
-### Functions ###
-df_to_ML_input = TF.df_to_ML_input
+import trees.functions as TF
 
 
 

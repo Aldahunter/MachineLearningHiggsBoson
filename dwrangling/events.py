@@ -3,7 +3,8 @@ import numpy as np
 import os
 import pickle
 import pandas as pd
-from reconstruction import Reco, addReco
+
+import dwrangling.reconstruction as DWR
 
 
 
@@ -298,17 +299,17 @@ def load_events(file):
         init_state=[]
         leptons=[]
         hadrons=[]
-        met=Reco(0,0,0,0)
-        muon=Reco(0,0,0,0)
-        antimuon=Reco(0,0,0,0)
-        neutrino=Reco(0,0,0,0)
-        antineutrino=Reco(0,0,0,0)
+        met=DWR.Reco(0,0,0,0)
+        muon=DWR.Reco(0,0,0,0)
+        antimuon=DWR.Reco(0,0,0,0)
+        neutrino=DWR.Reco(0,0,0,0)
+        antineutrino=DWR.Reco(0,0,0,0)
 
         for part in event['particles']:
 
             # Initial Particles
             if part['status'] == -1:
-                tmp = Reco(part['px'], part['py'], part['pz'], part['e'])
+                tmp = DWR.Reco(part['px'], part['py'], part['pz'], part['e'])
                 tmp.setpid(part['id'])
                 init_state.append(tmp)
 
@@ -317,39 +318,39 @@ def load_events(file):
 
                 # Neutrinos
                 if abs(part['id']) == 12 or abs(part['id']) == 14 or abs(part['id']) == 16:
-                    tmp = Reco(part['px'], part['py'], part['pz'], part['e'])
+                    tmp = DWR.Reco(part['px'], part['py'], part['pz'], part['e'])
                     tmp.setpid(part['id'])
-                    met = addReco(met,tmp)
+                    met = DWR.addReco(met,tmp)
 
                     # Muon Neutrino
                     if(part['id'] == 14): 
-                        neutrino = addReco(neutrino,tmp)
+                        neutrino = DWR.addReco(neutrino,tmp)
                         neutrino.setpid(tmp.pid)
 
                     # Muon Anti-Neutrino
                     if(part['id'] == -14): 
-                        antineutrino = addReco(antineutrino,tmp)
+                        antineutrino = DWR.addReco(antineutrino,tmp)
                         antineutrino.setpid(tmp.pid)
 
                 # Charged leptons
                 elif abs(part['id']) == 11 or abs(part['id']) == 13 or abs(part['id']) == 15:
-                    tmp = Reco(part['px'], part['py'], part['pz'], part['e'])
+                    tmp = DWR.Reco(part['px'], part['py'], part['pz'], part['e'])
                     tmp.setpid(part['id'])
                     leptons.append(tmp)
 
                     # Muon
                     if(part['id'] == 13): 
-                        muon = addReco(muon,tmp)
+                        muon = DWR.addReco(muon,tmp)
                         muon.setpid(tmp.pid)
 
                     # Anti Muon
                     if(part['id'] == -13): 
-                        antimuon = addReco(antimuon,tmp)
+                        antimuon = DWR.addReco(antimuon,tmp)
                         antimuon.setpid(tmp.pid)
 
                 # Hadrons (Composite of 2 or more quarks, held by strong force)
                 else:
-                    tmp = Reco(part['px'], part['py'], part['pz'], part['e'])
+                    tmp = DWR.Reco(part['px'], part['py'], part['pz'], part['e'])
                     tmp.setpid(part['id'])
                     hadrons.append(tmp)
 

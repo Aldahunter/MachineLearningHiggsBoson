@@ -5,10 +5,9 @@ from skhep.pdg import ParticleDataTable
 
 
 
-### Variables ###
+### Data ###
 PDT = ParticleDataTable(os.path.join(os.getcwd(),
                                      "Data","mass_width_2018.mcd"))
-
 
 
 ### Functions ###

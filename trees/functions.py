@@ -1,27 +1,11 @@
 ### Imports ###
-import treenodes as TN
 from scipy.optimize import minimize_scalar
 
+import trees.nodes as TN
 
 
 
 ### Functions ###
-def df_to_ML_input(df):
-    
-    # Obtain list of observables.
-    input_observables = list(df.columns.values)
-   
-    # Remove the signal column from observables.
-    input_observables.remove('signal')
-    
-    # Obtain numpy arrays for obervables and signal (labels).
-    observables = df[input_observables].values
-    labels = df.signal.values
-    
-    # Return the observables and labels arrays.
-    return observables, labels
-
-
 def partition_data(observables, labels, partition_value, n_obsv):
     
     # Create condition for splitting data
@@ -178,7 +162,7 @@ def grow_tree(observables, labels, impurity_fn=gini_impurity, depth=0, **kwargs)
     
     # Else create a branch with this observable and partition value.
     return TN.TreeBranch(partition_value, observables, labels,
-                      depth, impurity_fn, cost, n_obsv, **kwargs)
+                         depth, impurity_fn, cost, n_obsv, **kwargs)
 
 
 def show_tree(node, prefix='Root', spacing=' ', trimmed=True, rounded=True):
