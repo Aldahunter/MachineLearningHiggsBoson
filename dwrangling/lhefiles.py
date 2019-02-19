@@ -191,9 +191,9 @@ def lhe_to_dataframes(collision):
     lhe_generators = load_lhe_to_generators(collision)
 
     # Loop through process for signal and background files.
-    dfs = {}
-    data_name = {'s': 'signal', 'b', 'background'}
-    for s_b, is_signal, lhe_generator in zip(['s', 'b'], [True, False], lhe_generators):
+    dfs = [[],[]]
+    data_name = ['signal', 'background']
+    for s_b, is_signal, lhe_generator in zip([0, 1], [True, False], lhe_generators):
 
         # Get values & column names from first item in LHE generator
         lhe_event = next(lhe_generator)

@@ -8,7 +8,7 @@ import dwrangling.lhefiles as DWLHE
 
 
 ### Loading/Saving Functions ###
-load_as_events = DWLHE.lhe_to_events(collision)
+load_as_events = DWLHE.lhe_to_events
 
 
 
@@ -63,14 +63,10 @@ class Event(object):
     
     
     def __str__(self):
-        attributes = [f"initial: [{ ', '.join([p.get_name(p.pid)
-                                               for p in self.init_state]) }]",
-                      f"intermediate: [{ ', '.join([p.get_name(p.pid)
-                                                    for p in self.inter_state]) }]",
-                      f"leptons: [{ ', '.join([p.get_name(p.pid)
-                                               for p in self.leptons]) }]",
-                      f"hadrons: [{ ', '.join([p.get_name(p.pid)
-                                               for p in self.hadrons]) }]",]
+        attributes = [f"initial: [{ ', '.join([p.get_name(p.pid) for p in self.init_state]) }]",
+                      f"intermediate: [{ ', '.join([p.get_name(p.pid) for p in self.inter_state]) }]",
+                      f"leptons: [{ ', '.join([p.get_name(p.pid) for p in self.leptons]) }]",
+                      f"hadrons: [{ ', '.join([p.get_name(p.pid) for p in self.hadrons]) }]",]
         return "; ".join(attributes)
     
     

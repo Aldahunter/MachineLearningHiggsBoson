@@ -1,6 +1,8 @@
 """Pipelines - The functions associated with quick data pipelines \
 for Machine Learning."""
 
+import os
+
 import dwrangling as DW
 import dwrangling.reconstruction as DWR
 import dwrangling.events as DWE

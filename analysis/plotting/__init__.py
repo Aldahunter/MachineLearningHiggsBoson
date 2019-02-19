@@ -1,10 +1,38 @@
-import matplotlib.pyplot as plt
-import numpy as np
+"""Plotting - Module for Analysis Plots of Machine Learning Classifier's and their outputs."""
 
+import os
+import numpy as np
+import matplotlib.pyplot as plt
+
+import dwrangling as DW
 import analysis.metrics as AME
 import analysis.misc as AMI
 
+
+
+### Data ###
+comma_space = ', '
+
+
 ### Functions ###
+def get_image_file_paths(name, ext, *directories):
+    f"""Returns the file location as a string, for both signal and background.
+    
+    Parameters:
+     - name: The name of the file as type 'str';
+     - ext: The file extension/type as type 'str', e.g. 'jpg';
+     - directories: The directories for the file as 'str's in the correct order."""
+
+    # Validate and clean inputs
+    name, ext = name.strip(), ext.strip()
+    directories = [dir_.strip() for dir_ in directories]
+    ext = ext if (ext[0] == '.') else '.' + ext
+
+    # Obtain the file's path and return
+    file_loc = os.path.join(os.getcwd(), "Figures", *directories, name + ext)
+    return file_loc
+
+
 def add_text(x, y, label):
     string = ',\n'.join([line.strip()
                          for line in label.split('|')])
@@ -22,12 +50,12 @@ def latex_label(observables):
         if s.startswith('Z_'):
             ss = '$'+ss.replace('_','^{',1).replace('_','}_{',1)+'}$'
         elif s == 'signal':
-            continue
+            ss = 'Signal'
         else:
             ss = ss.replace('-', '^{-}',1).replace('+', '^{+}',1)
             ss = '$'+ss.replace('_','_{',1)+'}$'
         latex_observables.append(ss)
-    return ' & '.join(latex_observables)
+    return latex_observables
 
 
 def plot_results(classifier, labels, labels_pred, *train_results, n_bins=50,

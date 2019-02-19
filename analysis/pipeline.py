@@ -8,8 +8,8 @@ import analysis.plotting as AP
 ### Functions ###
 def SN_classifier(classifier, data_df, classifier_kwargs, train_frac=0.67, rseed=None):
     """Trains and tests the classifer with the events data_df panda.DataFrame \
-    (containing only the desired observables and signal columns) using the \
-    given classifier_kwargs."""
+(containing only the desired observables and signal columns) using the given \
+classifier_kwargs."""
     if rseed is not None:
         seed(rseed)
     
@@ -34,8 +34,8 @@ def SN_classifier(classifier, data_df, classifier_kwargs, train_frac=0.67, rseed
 
 
 def analyse_classifier(classifier, sgn_df, bkg_df, input_observables, classifier_kwargs):
-    """Analyses the given classifer with the panda.DataFrame events, using the 
-    input_observables and classifier_kwargs."""
+    """Analyses the given classifer with the panda.DataFrame events, using the \
+input_observables and classifier_kwargs."""
     
     sgn_data = sgn_df[input_observables]
     bkg_data = bkg_df[input_observables]
@@ -74,8 +74,8 @@ def analyse_classifier(classifier, sgn_df, bkg_df, input_observables, classifier
     rmsq = AME.rms_deviation(labels['test'], test_predictions,
                              labels['train'], train_predictions,
                              n_bins=50)
-    print(f"rmsq[s]: {rmsq['s']}")
-    print(f"rmsq[b]: {rmsq['b']}")
+    print("rmsq[s]: {0}".format(rmsq['s']));
+    print("rmsq[b]: {0}".format(rmsq['b']));
     
     sn_ratio = AME.S_B_ratio(labels['test'], test_predictions, p_threshold)
     print(f'S/N : {sn_ratio}')

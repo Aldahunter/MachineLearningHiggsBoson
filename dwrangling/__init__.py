@@ -1,6 +1,7 @@
 """Data Wrangling - Cleaning, Munging, Mapping and Pipelines."""
 
 import os
+import pickle
 
 import dwrangling.dataframes as DWDF
 
@@ -16,6 +17,13 @@ collision_observables = {'pp_2mu2e': ['m_H', 'Z_mu_rap', 'Z_e_rap', 'mu-_px', 'e
 
 
 ### File Functions ###
+def collision_check(collision):
+    collision = collision.strip()
+    
+    if not collision in collisions:
+        raise ValueError(f"'{collision}' is not a valid collision name. " +
+                         f"You can choose from: {comma_space.join(collisions)}.")
+
 def get_data_file_paths(collision, ext, *directories):
     f"""Returns the file location as a string, for both signal and background.
     
@@ -25,11 +33,10 @@ def get_data_file_paths(collision, ext, *directories):
 
     # Validate and clean inputs
     collision, ext = collision.strip(), ext.strip()
+    directories = [dir_.strip() for dir_ in directories]
+    collision_check(collision)
     ext = ext if (ext[0] == '.') else '.' + ext
-    if not collision in collisions:
-        raise ValueError(f"'{collision}' is not a valid collision name. " +
-                         f"You can choose from: {comma_space.join(collisions)}.")
-
+    
 
     # Get file names for both
     signal_file_name = collision.replace('_', '_h_', 1) + '_heft'
@@ -83,7 +90,7 @@ def get_collision_observables(collision):
     
     
     # Validate and clean inputs
-    collision collision.strip()
+    collision = collision.strip()
     if not collision in collisions:
         raise ValueError(f"'{collision}' is not a valid collision name. " +
                          f"You can choose from: {comma_space.join(collisions)}.")
