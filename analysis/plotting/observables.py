@@ -90,12 +90,9 @@ def plot_correlation_matrix_heatmap(odataframe, c_range=(None, None), fig_name=N
     # Set up the matplotlib figure
     f, ax = plt.subplots(figsize=(11, 9))
 
-    # Generate a custom diverging colormap
-    cmap = sns.diverging_palette(220, 10, as_cmap=True)
-
     # Draw the heatmap with the mask and correct aspect ratio
-    sns.heatmap(plot_corr, mask=mask, cmap=cmap, center=0, vmin=vmin, vmax=vmax,
-                square=True, linewidths=.5, cbar_kws={"shrink": .75})
+    sns.heatmap(plot_corr, mask=mask, cmap=AP.std_cmap, center=0, square=True,
+                vmin=vmin, vmax=vmax, linewidths=.5, cbar_kws={"shrink": .75})
 
     # Save fig:
     if fig_name is not None:
@@ -169,12 +166,9 @@ def plot_correlation_row(odataframe, observable='signal', sort=True,
     # Set up the matplotlib figure
     f, ax = plt.subplots(figsize=(11, 9))
 
-    # Generate a custom diverging colormap
-    cmap = sns.diverging_palette(220, 10, as_cmap=True)
-
     # Draw the heatmap with the correct aspect ratio
-    a = sns.heatmap(plot_row, cmap=cmap, center=0, vmin=vmin, vmax=vmax,
-                square=True, linewidths=.5,
+    sns.heatmap(plot_row, cmap=AP.std_cmap, center=0, square=True,
+                vmin=vmin, vmax=vmax, linewidths=.5,
                 cbar_kws={"shrink": 1, "orientation": "horizontal",
                           'pad':-0.081, 'aspect':35})
     

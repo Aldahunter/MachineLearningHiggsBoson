@@ -3,6 +3,7 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 
 import dwrangling as DW
 import analysis.metrics as AME
@@ -12,6 +13,10 @@ import analysis.misc as AMI
 
 ### Data ###
 comma_space = ', '
+c = mcolors.ColorConverter().to_rgb
+cmap_input = [c('navy'), c('blue'), 0.20, c('blue'), c('royalblue'), 0.40,
+              c('royalblue'), c('white'), 0.50, c('white'), c('orange'), 0.60,
+              c('orange'), c('darkorange'), 0.80, c('darkorange'), c('orangered')]
 
 
 ### Functions ###
@@ -56,6 +61,32 @@ def latex_label(observables):
             ss = '$'+ss.replace('_','_{',1)+'}$'
         latex_observables.append(ss)
     return latex_observables
+
+
+def make_colormap(name, seq):
+    """Returns a LinearSegmentedColormap.
+    
+    Parameters:
+     - name: A string for the name of the color map.
+     - seq: A sequence of 'float's and RGB 'tuple's. The floats should be 
+            increasing and in the interval (0,1), as they give the
+            proportions between the RGB tuples. """
+    
+    seq = [(None,) * 3, 0.0] + list(seq) + [1.0, (None,) * 3]
+    
+    cdict = {'red': [], 'green': [], 'blue': []}
+    for i, item in enumerate(seq):
+        
+        if isinstance(item, float):
+            r1, g1, b1 = seq[i - 1]
+            r2, g2, b2 = seq[i + 1]
+            
+            cdict['red'].append([item, r1, r2])
+            cdict['green'].append([item, g1, g2])
+            cdict['blue'].append([item, b1, b2])
+            
+    return mcolors.LinearSegmentedColormap(name, cdict)
+
 
 
 def plot_results(classifier, labels, labels_pred, *train_results, n_bins=50,
@@ -492,3 +523,7 @@ def ROC_displacement(labels, labels_pred, *train_results, n_cuts=100, return_max
 
 #     # Show plots
 #     fig.show()
+
+
+### Functional Data ###
+std_cmap = make_colormap('RGB', cmap_input)
