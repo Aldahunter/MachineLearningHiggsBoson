@@ -7,6 +7,7 @@ import dwrangling as DW
 import dwrangling.reconstruction as DWR
 import dwrangling.events as DWE
 import dwrangling.dataframes as DWDF
+import dwrangling.dataframes.observables as DWDFO
 import dwrangling.lhefiles as DWLHE
 
 
@@ -140,7 +141,7 @@ def get_dataframe(collision):
     return DWDF.ODataFrame.from_sb_dfs(*odfs)
 
 
-def get_ML_dataframe(collision, train_frac = 0.70):
+def get_ML_dataframe(collision, train_frac = 0.70, train_test_split=True):
     f"""Unpickles the 'ObservablesDataFrames' files, splits them into training \
 and testing sets and returns a dictionary of dataframes - with the optimal \
 observables for this collision.
@@ -163,15 +164,21 @@ observables for this collision.
     # Retrieve the ObservablesDataFrame for the collision
     dataframe = get_dataframe(collision)
     
+    # Add the reconstructed observables
+    dataframe = DWDFO.add_reconstructed_observables(dataframe)
+    
     # Get the optimal observables dataframe
-    dataframe = DWDF.observables.get_ML_observables_dataframe(collision,
+    dataframe = DWDFO.get_ML_observables_dataframe(collision,
                                                               dataframe)
     
     # Split the dataframe into training and testing sets.
-    dict_dataframe = DW.split_data(dataframe, train_frac = train_frac)
+    if train_test_split:
+        dataframes = tuple(DW.split_data(dataframe, train_frac = train_frac).values())
+    else:
+        dataframes = dataframe
     
     # Return the Machine Learning ready dataframe dictionary.
-    return dict_dataframe
+    return dataframes
 
 
 df_to_ML_input = DW.df_to_ML_input

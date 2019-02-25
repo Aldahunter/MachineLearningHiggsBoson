@@ -1,6 +1,6 @@
 import numpy as np
+import sklearn.metrics as skmetrics
 from scipy.optimize import minimize_scalar
-from sklearn.metrics import confusion_matrix, roc_auc_score
 
 import analysis.misc as AMI
 
@@ -9,7 +9,8 @@ def confusion_matrix(labels, labels_predicted, p_threshold=0.5):
     bool_predicted = np.fromiter((label_pred >= p_threshold
                                   for label_pred in labels_predicted),
                                 dtype=bool, count=len(labels_predicted))
-    return metrics.confusion_matrix(labels, bool_predicted).ravel()
+    s = list(skmetrics.confusion_matrix(labels, bool_predicted, labels=[False, True]).ravel())
+    return s
 
 
 def accuracy(tn, fp, fn, tp):
@@ -36,24 +37,18 @@ def f1_score(tn, fp, fn, tp):
 
 
 def auc(labels, labels_pred, **kwargs):
-    return metrics.roc_auc_score(labels, labels_pred, **kwargs)
+    return skmetrics.roc_auc_score(labels, labels_pred, **kwargs)
 
 
 def find_p_threshold(labels, labels_pred):
     
     # Define function to minimize for p_threshold to give maximum Signal-Noise ratio.
-    def minimise_fn(p_threshold):
-        cm = confusion_matrix(labels, labels_pred, p_threshold)
-        epsilon_b, epsilon_s = fpr(*cm), recall(*cm)
-        
-        try:
-            score = -1.0 * (epsilon_s / np.sqrt(epsilon_b))
-        except ZeroDivisionError:
-            score = 0.0
-        return score
+    def minimise_fn(p_threshold, labels, labels_predicted):
+        return -1.0 * S_B_ratio(labels, labels_predicted, p_threshold)
 
     # Minimize the defined function.
-    optimize_result = minimize_scalar(minimise_fn, method='Bounded', bounds=(0.0, 1.0))
+    optimize_result = minimize_scalar(minimise_fn, args=(labels, labels_pred),
+                                      method='Bounded', bounds=(0.0, 1.0))
     
     # Return optimized value of p_threshold.
     return optimize_result.x
@@ -61,20 +56,34 @@ def find_p_threshold(labels, labels_pred):
 
 def S_B_ratio(labels, labels_predicted, p_threshold=0.5):
     # Define physics values.
-    sigma_s = 0.204436505
-    sigma_b = 12.25108192
-    luminosity = 100
+    sigma_s = 0.204436505 #fb
+    sigma_b = 12.25108192 #fb
+    luminosity = 100.0 #fb^-1
     
     # Obtain Machine Learning values.
     cm = confusion_matrix(labels, labels_predicted, p_threshold)
+    if cm[-1] < 10:
+        return 0.0
+    
     epsilon_b, epsilon_s = fpr(*cm), recall(*cm)
     
     # Calculate Signal-Noise ratio.
     try:
         sb_ratio = ( (sigma_s * np.sqrt(luminosity) * epsilon_s) 
                      / np.sqrt(sigma_b * epsilon_b) )
+    
     except ZeroDivisionError:
-        sb_ratio = 0.0
+        sb_ratio = np.inf
+    
+    if np.isnan(sb_ratio):
+        sb_ratio = 0
+        
+    with open('sb.txt', "a") as f:
+            f.write(str(p_threshold)+'\n')
+            f.write(str(cm)+'\n')
+            f.write(str(epsilon_b)+'\n')
+            f.write(str(epsilon_s)+'\n')
+            f.write(str(sb_ratio)+'\n\n')
     
     # Return Signal-Noise ratio.
     return sb_ratio

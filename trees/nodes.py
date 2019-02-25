@@ -1,9 +1,39 @@
 ### Imports ###
+from copy import deepcopy
+
+import dwrangling.dataframes as DWDF
 import trees.functions as TF
 
 
 
 ### Classes ####
+class NoneNode(object):
+    def __init__(self, depth=None):
+        # Define attributes.
+        self._depth = depth
+    
+    def __repr__(self, *args, **kwargs):
+        return "None"
+    
+    def __str__(self, *args, **kwargs):
+        return "NoneType Node"
+    
+    def __bool__(self):
+        return False
+    
+    def __eq__(self, other):
+        return None == other
+    
+    def __neq__(self, other):
+        return not self.__eq__(other)
+    
+    def __hash__(self):
+        return hash(None)
+    
+    @property
+    def depth(self): return self._depth
+
+
 class TreeNode(object):
     
     # Initialise TreeNode.
@@ -29,6 +59,9 @@ class TreeNode(object):
     def classes(self): return self._classes
     @property
     def impurity(self): return self._impurity
+    
+    def copy(self):
+        return deepcopy(self)
         
     # Define how node is shown as a string.
     def __str__(self, trimmed=True, rounded=True):
@@ -47,6 +80,9 @@ class TreeNode(object):
         
         # Otherwise show all properties, seperated by '|'.
         return '| '.join(propities)
+
+    def __repr__(self):
+        return self.__str__()
                 
 
 
@@ -73,6 +109,9 @@ class TreeLeaf(TreeNode):
         
         # Show singal probability and inherited properties, seperated by '|'.
         return f"P:{self.P:.{digits}f}| " + super().__str__(trimmed, rounded)
+
+    def __repr__(self):
+        return self.__str__()
 
                     
         
@@ -121,11 +160,95 @@ class TreeBranch(TreeNode):
         
         # Show partition value (split), observable's index (n_obsv),
         # cost and inherited properties, seperated by '|'.
-        return (f"S:{self.split:.{digits}f}| O:{self.n_obsv:d}"
+        return (f"S:{self.split:.{digits}f}| O:{self.n_obsv}"
                 + s_mid + "| " + super().__str__(trimmed, rounded))
+                     
+    def __repr__(self):
+        return self.__str__()
     
-    # Define how branch is indexed.
     def __getitem__(self, key):
+        return self.subtrees[key]  #If indexed, index subtrees
+
+
+class TreePath(object):
+    
+    def __init__(self, root_node, P):
+        self._P = P
+        self._tree = root_node
+        self._leaves = TF.get_num_leaves(root_node)
+    
+    def __str__(self):
+        return f"TreePath( To probability: {self.P}; with n_leaves: {self._leaves})"
+    __repr__ = __str__
+
+    def __getitem__(self, key):
+        return self.tree[key]
+
+
+    def show(self, spacing=' ', trimmed=True, rounded=True):
+        """Prints the tree to stdout."""
+        TF.show_tree(self.tree, 'Root', spacing, trimmed, rounded)
+    
+    def get_depth(self):
+        return TF.tree_depth(self.tree)
+    
+    def get_paths(self):
+        """Returns a :class:`tuple` of paths, where each path is a :class:`tuple` \
+        of 1 character :class:`str` and each :class:`str` is either '<' (less than \
+        branch) or '>' (greater than branch)."""  
+        paths = TF.get_split_order(self.tree, self.P)[-1]
+        return [path[::-1] for path in paths]
+    
+    def get_samples(self, dataframe):
+        """Returns a list of dataframes one for each leaf sample.
+    
+        Paramters:
+         - dataframe: A :class:`dwrangling.dataframe.ODataFrame` to sample from. 
+
+        Returns:
+         - samples: A :class:`list` of :class:`dwrangling.dataframe.ODataFrame` \
+         dataframes, one for each leaf node."""
+                     
+        if not isinstance(dataframe, DWDF.ODataFrame):
+            raise ValueError("The 'dataframe' must be of type " +
+                             f"'{type(DWDF.ODataFrame)}', not " +
+                             f"'{type(dataframe)}'.")
         
-        # If indexed, return indexed child node.
-        return self.subtrees[key]
+        paths = self.get_paths()          
+        return TF.get_node_samples(self.tree, dataframe, paths)
+    
+    def get_path_sample_generators(self, dataframe):
+        """Returns a list of generators one for each path to each leaf.
+    
+        Paramters:
+         - dataframe: A :class:`dwrangling.dataframe.ODataFrame` to sample from. 
+
+        Returns:
+         - samples: A :class:`tuple` :class:`generator`, where each :class:`tuple` contains:
+             + observable: A :class:`str` holding the observable which was partitioned on;
+             + partition_value: A :class:`float` for the value of the observable used to\
+             partition the data;
+             + branch: A 1 character :class:`str` to determine which branch to take, '<' is \
+             the 'less than branch' and '>' is the 'greater than or equal to' branch;
+             + sample: A :class:`dwrangling.dataframe.ODataFrame` holding that node's sample."""
+                     
+        if not isinstance(dataframe, DWDF.ODataFrame):
+            raise ValueError("The 'dataframe' must be of type '{type(DWDF.ODataFrame)}', " +
+                             f"not '{type(dataframe)}'.")
+        
+        generators = []
+        for path in self.get_paths():
+            generators.append(TF.yield_path_samples(self.tree, dataframe, path))
+        return generators
+
+
+    @property
+    def P(self): return self._P
+    @property
+    def tree(self): return self._tree
+    @property
+    def leaves(self): return self._leaves
+
+                     
+                     
+        

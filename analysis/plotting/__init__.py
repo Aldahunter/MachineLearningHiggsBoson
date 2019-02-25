@@ -38,14 +38,15 @@ def get_image_file_paths(name, ext, *directories):
     return file_loc
 
 
-def add_text(x, y, label):
+def add_text(x, y, label, axes=plt.gca(), **kwargs):
     string = ',\n'.join([line.strip()
                          for line in label.split('|')])
     plt.text(x, y, string,
              horizontalalignment='right',
              verticalalignment='center',
              weight='semibold',
-             transform=plt.gca().transAxes)
+             transform=axes.transAxes,
+             **kwargs)
 
 
 def latex_label(observables):
@@ -90,93 +91,135 @@ def make_colormap(name, seq):
 
 
 def plot_results(classifier, labels, labels_pred, *train_results, n_bins=50,
-                 text="Observable"):
+                 text="Observable", p_threshold = None, show_cm=True):
     AMI.check_label_params(labels, labels_pred, *train_results)
     
+    # Add test and train results to dictionary for iterating
     full_results = {'Test': (labels, labels_pred)}
-    if not train_results:
+    if train_results:
         full_results['Train'] = train_results
+        ax_dimensions = [0,0.25,0.8,0.75]
+    else:
+        ax_dimensions = [0.05,0.05,0.9,0.9]
     
-    fig = plt.figure(figsize=(10.67,9.77))
-    ax = fig.add_axes([0,0.25,0.8,0.75])
+    # Set-up figure and main axis
+    fig = plt.figure(figsize=(11.00,9.77)) #(8.0, 7.33)
+    ax = fig.add_axes(ax_dimensions)
     
+    # Iterate through train and test data
     histograms = {}
     markersize = 18
     for key, type_results in full_results.items():
         
+        # Seperate signal and background
         is_signal = type_results[0]
         signal_probabilities = type_results[1]
-        results = {'s': signal_probabilities[is_signal is True],
-                   'b': signal_probabilities[is_signal is False]}
+        results = {'s': signal_probabilities[is_signal == True],
+                   'b': signal_probabilities[is_signal == False]}
 
+        # Create bins for histograms
         bins = np.linspace(0, 1, n_bins + 1)
         histogram = {'s': np.histogram(results['s'], bins)[0],
                      'b': np.histogram(results['b'], bins)[0]}
         
+        # Find bin widths and centers
         width = bins[1] - bins[0]
         center = (bins[:-1] + bins[1:]) / 2
-
+        
+        # Normalise bins
         histogram['s'] = AMI.hist_normalise(histogram['s'], width)
         histogram['b'] = AMI.hist_normalise(histogram['b'], width)
         
         histograms[key] = histogram
 
-        if key == 'Train':
+        # Plot histograms
+        if key == 'Test':
             ax.bar(center, histogram['b'], align='center', color='blue', 
-                    label='Background [Train]', width=width, alpha=.5, zorder=1)
+                    label='Background', width=width, alpha=.5, zorder=1)
             ax.bar(center, histogram['s'], align='center', color='orange',
-                    label='Signal [Train]', width=width, alpha=.5, zorder=1)
-        elif key == 'Test':
+                    label='Signal', width=width, alpha=.5, zorder=1)
+        elif key == 'Train':
             ax.plot(center, histogram['b'], marker='x', ls='', color='blue',
-                    markersize=markersize, label='Background', alpha=1.0, zorder=2)
+                    markersize=markersize, label='Background [Train]', alpha=1.0, zorder=2)
             ax.plot(center, histogram['s'], marker='x', ls='', color='orange',
-                    markersize=markersize, label='Signal', alpha=1.0, zorder=2)
+                    markersize=markersize, label='Signal [Train]', alpha=1.0, zorder=2)
     
-    ax_res = fig.add_axes([0,0,0.8,0.25], sharex=ax)
-    c = {'s':'orange','b':'blue'}
-    deviations = {}
-    for sb in ['b', 's']:
-        deviation = histograms['Train'][sb] - histograms['Test'][sb]
-        deviations[sb] = deviation
-        ax_res.bar(center, deviation, align='center', color=c[sb],
-                   width=width, alpha=.5)
-    ax_res.axhline(color='grey', linestyle='--', zorder=0)
-    
-    ax_dist = fig.add_axes([0.8,0,0.2,0.25], sharey=ax_res)
-    ymin, ymax = ax_res.get_ylim()
-    for sb in ['b', 's']:
-        mu, std = norm.fit(deviations[sb])
-        
-        y = np.linspace(ymin, ymax, 100)
-        p = norm.pdf(y, mu, std)
-        
-        ax_dist.plot(p, y, ls='-', color=c[sb], alpha=0.6, linewidth=3, zorder=1)
-    ax_dist.axhline(color='grey', linestyle='--', zorder=0)
-    
-    
-    fontsize = 'x-large'                    #  {'x-small', 'medium', 'xx-large'}
-    ax.text(0.33, 35, 'Paramters:\n'+text.replace(' &',','), fontsize=fontsize)
+    if train_results:
+        # Plot residual deviations between test and train data
+        ax_res = fig.add_axes([0,0,0.8,0.25], sharex=ax)
+        c = {'s':'orange','b':'blue'}
+        deviations = {}
+        for sb in ['b', 's']:
+            deviation = histograms['Train'][sb] - histograms['Test'][sb]
+            deviations[sb] = deviation
+            ax_res.bar(center, deviation, align='center', color=c[sb],
+                       width=width, alpha=.5)
+        ax_res.axhline(color='grey', linestyle='--', zorder=0)
 
+        # Plot distribution of deviations
+        ax_dist = fig.add_axes([0.8,0,0.2,0.25], sharey=ax_res)
+        ymin, ymax = ax_res.get_ylim()
+        for sb in ['b', 's']:
+            mu, std = norm.fit(deviations[sb])
+
+            y = np.linspace(ymin, ymax, 100)
+            p = norm.pdf(y, mu, std)
+
+            ax_dist.plot(p, y, ls='-', color=c[sb], alpha=0.6, linewidth=3, zorder=1)
+        ax_dist.axhline(color='grey', linestyle='--', zorder=0)
+    
+    if p_threshold is not None:
+        if not (0 < p_threshold < 1):
+            raise ValueError("'p_threshold' must be between 0 and 1, " +
+                             f"not {p_threshold}.")
+        ax.axvline(p_threshold, linestyle='--', color='black')
+        
+        if train_results:
+            ax_res.axvline(p_threshold, linestyle='--', color='black')
+    
+    
+    # Add observable labels as text
+    fontsize = 'x-large'                    #  {'x-small', 'medium', 'xx-large'}
+    add_text(0.39, 0.95, 'Observables:\n'+text.replace(' &',','), fontsize=fontsize, axes=ax) #35
+    
+    if show_cm:
+        p_threshold = 0.5 if (p_threshold is None) else p_threshold
+        tn, fp, fn, tp = AME.confusion_matrix(labels, labels_pred, p_threshold=p_threshold)
+        str_cm = f"TP: {tp:5d}; FP: {fp:5d};\nFN: {fn:5d}; TN: {tn:5d};"
+        add_text(0.39, 0.88, 'Confusion Matrix:\n'+str_cm, fontsize='medium', axes=ax)
+
+    
+    # Add x labels
     s_classifier = str(type(classifier))[8:-2].split('.')[-1]
-    ax_res.set_xlim(0.0, 1.0)
-    ax_res.set_xlabel(f"Classifier Output [{s_classifier}]", fontsize=fontsize)
-    ax_dist.set_xlabel("Normalised Deviation", fontsize=fontsize)
+    ax.set_xlim(0.0, 1.0)
+    if train_results:
+        ax_res.set_xlabel(f"Classifier Output [{s_classifier}]", fontsize=fontsize)
+        ax_dist.set_xlabel("Normalised Deviation", fontsize=fontsize)
+    else:
+        ax.set_xlabel(f"Classifier Output [{s_classifier}]", fontsize=fontsize)
     
+    # Add y labels
     ax.set_ylabel("Normalised Counts per Bin", fontsize=fontsize)
-    ax_res.set_ylabel("Deviation from Training", fontsize=fontsize)
-    ax_dist.set_ylim(ymin, ymax)
-    ax_dist.yaxis.tick_right()
+    if train_results:
+        ax_res.set_ylabel("Deviation from Training", fontsize=fontsize)
+        ax_dist.set_ylim(ymin, ymax)
+        ax_dist.yaxis.tick_right()
     
-    
+    # Set tick parameters
     ax.tick_params(axis='y', bottom=True, top=True, left=True, right=True,
                    labelsize=fontsize, direction='inout')
     ax.tick_params(axis='x', bottom=True, top=True, left=True, right=True,
                    direction='in', labelbottom=False)
-    ax_res.tick_params(labelsize=fontsize, bottom=True, top=True, left=True,
-                       right=True, direction='inout')
-    ax_dist.tick_params(labelsize=fontsize, bottom=True, top=True, left=True,
-                        right=True, direction='inout')
+    if train_results:
+        ax_res.tick_params(labelsize=fontsize, bottom=True, top=True, left=True,
+                           right=True, direction='inout')
+        ax_dist.tick_params(labelsize=fontsize, bottom=True, top=True, left=True,
+                            right=True, direction='inout')
+    
+    # Add legend
     ax.legend(loc="upper left", fontsize=fontsize)
+    
+    # Show figure
     fig.show()
 
 

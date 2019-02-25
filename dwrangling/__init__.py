@@ -2,6 +2,8 @@
 
 import os
 import pickle
+import random
+import pandas as pd
 
 import dwrangling.dataframes as DWDF
 
@@ -10,48 +12,34 @@ import dwrangling.dataframes as DWDF
 ### Data ###
 bs = '//'
 comma_space = ', '
+
+#: Valid collision paramters.
 collisions = ['pp_2mu2e', 'pp_2mu2nu']
+
+#: Optimal collision observables.
 collision_observables = {'pp_2mu2e': ['m_H', 'Z_mu_rap', 'Z_e_rap', 'mu-_px', 'e-_py'],
-                         'pp_2mu2e': []}
+                         'pp_2mu2nu': []}
 
 
 
-### File Functions ###
-def collision_check(collision):
+### Hidden Functions ###
+def _docstring_parameter(*sub, **kwsub):
+    """Formats an objects docstring."""
+    def dec(obj):
+        obj.__doc__ = obj.__doc__.format(*sub, **kwsub)
+        return obj
+    return dec
+
+
+def _collision_check(collision):
     collision = collision.strip()
     
     if not collision in collisions:
         raise ValueError(f"'{collision}' is not a valid collision name. " +
                          f"You can choose from: {comma_space.join(collisions)}.")
 
-def get_data_file_paths(collision, ext, *directories):
-    f"""Returns the file location as a string, for both signal and background.
-    
-    Parameters:
-     - collision: The desired collision as a string, must be in {collisions};
-     - ext: The file extension/type as a string, e.g. 'jpg'."""
 
-    # Validate and clean inputs
-    collision, ext = collision.strip(), ext.strip()
-    directories = [dir_.strip() for dir_ in directories]
-    collision_check(collision)
-    ext = ext if (ext[0] == '.') else '.' + ext
-    
-
-    # Get file names for both
-    signal_file_name = collision.replace('_', '_h_', 1) + '_heft'
-    signal_file_loc = os.path.join(os.getcwd(), "Data", *directories,
-                                   signal_file_name + ext)
-
-    background_file_name = collision  + '_bkg'
-    background_file_loc = os.path.join(os.getcwd(), "Data", *directories,
-                                       background_file_name + ext)
-
-    # Return file locations
-    return signal_file_loc, background_file_loc
-
-
-def y_n_input(message):
+def _y_n_input(message):
     """Repeatdly ask user message, until they answer yes or no.
     
     Parameters:
@@ -77,16 +65,37 @@ def y_n_input(message):
 
 
 
+### Pickle Save/Load Functions ###
+def pickle_object(object, file_path):
+    """Pickles (saves) an 'object' at the location 'file_path'."""
+    with open(file_path, 'wb') as output:
+        pickle.dump(object, output, pickle.HIGHEST_PROTOCOL)
+    print(f"Successfully pickled '{FILE.split(bs)[-1]}'")
+
+def unpickle_object(file_path):
+    """Unpickles (loads) and returns an 'object' at the location 'file_path'."""
+    with open(file_path, 'rb') as _input:
+          obj = pickle.load(_input)
+    return obj
+
+
+
 ### Machine Learning Functions ###
+@_docstring_parameter(doc=DWDF.df_to_ML_input.__doc__)        
+def df_to_ML_input(dataframe):
+    """{doc}"""
+    return DWDF.df_to_ML_input(dataframe)
+
+@_docstring_parameter(collisions=collisions)        
 def get_collision_observables(collision):
-    f"""Returns a list of the collision's optimal observables'labels.
+    """Returns a list of the collision's optimal observables' labels.
     
     Parameters:
-     - collision: The desired collision as a string, must be in {collisions}.
+     - collision: The desired collision as a :class:`str`, must be in {collisions}.
     
     Returns:
-     - list: A list of str's corresponding to the collision's optimal \
-             observables for Machine Learning."""
+     - list: A :class:`list` of :class:`str`'s corresponding to the collision's \
+     optimal observables for Machine Learning."""
     
     
     # Validate and clean inputs
@@ -99,84 +108,69 @@ def get_collision_observables(collision):
 
 
 def split_data(dataframe, train_frac = 0.70):
-    """Splits the data into a training and testing set.
+    """Splits the data randomly into a training and testing set.
     
     Parameters:
-     - dataframe: The DataFrame you wish to split into sets;
-     - train_frac: The approximate fraction of data to use for the training
-                   set (Default: 0.7).
+     - dataframe: The :class:`pandas.DataFrame` you wish to split into sets;
+     - train_frac: A :class:`float` giving the fraction of data to use for \
+     the training set. [Default: 0.7].
     
     Returns:
-     - dict: A dictionary containing two 'ObservablesDataFrame's, with the
-             keys 'train' and 'test'."""
+     - train: A :class:`dwrangling.dataframes.ODataFrame` for training;
+     - test: A :class:`dwrangling.dataframes.ODataFrame` for testing."""
     
     # Validate train_frac parameter
     if not (0 < train_frac < 1):
         raise ValueError("The training fraction must be between 0 and 1, " +
                          f"not {train_frac}.")
     
-    # The data must be a pandas.DataFrame.
-    train_data, test_data = [], []
-
-    # Iterate through each row in data.
-    for _, datum in data.iterrows():
-        
-        # If unform random number between [0, 1] is less than,
-        # or equal to, the the train_frac.
-        if random() <= train_frac:
-            # Add row to train_data.
-            train_data.append(datum)
-        else:
-            # If greater than train_frac, add to test_data.
-            test_data.append(datum)
+    # Calculate train set size
+    train_size = int( len(dataframe) * train_frac)
     
-    # Convert to dataframes
-    train_data = pd.DataFrame(train_data).reset_index(drop=True)
-    test_data = pd.DataFrame(test_data).reset_index(drop=True)
+    # Randomly sample dataframe for train set and order by signal
+    train = dataframe.sample(train_size).sort_values('signal')
     
-    # Return dictionary of train_data and test_data as panda.DataFrames.
-    return {'train': DWDF.ODataFrame(train_data),
-            'test': DWDF.ODataFrame(test_data)}
+    # Obtain events from dataframe not in the train set
+    test = dataframe.loc[[(index not in train.index) for index in dataframe.index]]
+    
+    # Reset indexes
+    train = train.reset_index(level=None, drop=True)
+    test = test.reset_index(level=None, drop=True)
+    
+    # Return as ObservableDataFrames
+    return DWDF.ODataFrame(train), DWDF.ODataFrame(test)
 
 
-def df_to_ML_input(df):
-    """Converts a dataframe to arrays ready for Machine Learning.
+
+### File Functions ###
+@_docstring_parameter(collisions=collisions)        
+def get_data_file_paths(collision, ext, *directories):
+    """Returns the file location as a string, for both signal and background.
     
     Parameters:
-     - dataframe: A dataframe, containing only the observables you wish for ML
-                  parameters, with 'signal' as the final column.
-    
+     - collision: The desired collision as a :class:`str`, must be in {collisions};
+     - ext: The file extension/type as a :class:`str`, e.g. 'jpg'.
     
     Returns:
-     - observables: A 2d-array containing all the observables corresponding to
-                    each event from the dataframe, in the same column order;
-     - labels: A 1d-array containing all the 'signal' values that correspond to
-               each event."""
+     - signal_file_loc: A :class:`str` containing the path to the signal file;
+     - background_file_loc: A :class:`str` containing the path to the background \
+     file;"""
+
+    # Validate and clean inputs
+    collision, ext = collision.strip(), ext.strip()
+    directories = [dir_.strip() for dir_ in directories]
+    _collision_check(collision)
+    ext = ext if (ext[0] == '.') else '.' + ext
     
-    # Obtain list of observables.
-    input_observables = list(df.columns.values)
-   
-    # Remove the signal column from observables.
-    input_observables.remove('signal')
-    
-    # Obtain numpy arrays for obervables and signal (labels).
-    observables = df[input_observables].values
-    labels = df.signal.values
-    
-    # Return the observables and labels arrays.
-    return observables, labels
 
+    # Get file names for both
+    signal_file_name = collision.replace('_', '_h_', 1) + '_heft'
+    signal_file_loc = os.path.join(os.getcwd(), "Data", *directories,
+                                   signal_file_name + ext)
 
+    background_file_name = collision  + '_bkg'
+    background_file_loc = os.path.join(os.getcwd(), "Data", *directories,
+                                       background_file_name + ext)
 
-### Pickle Save/Load Functions ###
-def pickle_object(object_, file_path):
-    """Pickles (saves) an 'object_' at the location 'file_path'."""
-    with open(file_path, 'wb') as output:
-        pickle.dump(object_, output, pickle.HIGHEST_PROTOCOL)
-    print(f"Successfully pickled '{FILE.split(bs)[-1]}'")
-
-def unpickle_object(file_path):
-    """Unpickles (loads) and returns an 'object' at the location 'file_path'."""
-    with open(file_path, 'rb') as _input:
-          obj = pickle.load(_input)
-    return obj
+    # Return file locations
+    return signal_file_loc, background_file_loc
