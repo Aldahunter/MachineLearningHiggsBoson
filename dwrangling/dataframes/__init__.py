@@ -1,27 +1,29 @@
-"""Dataframes - Functions to load, manipulate and reconstruct observables as \
-event DataFrames."""
+"""Dataframes - Functions to load, manipulate and reconstruct observables \
+as event DataFrames."""
 
 import numpy as np
 import pandas as pd
+import dwrangling as DW
 
 
 
 ### DF Manipulation Functions ###
 def merge_dataframes(*dataframes, **kwargs):
-    """Merges the :class:`pandas.DataFrame`'s ontop of one another in the order \
-    given."""
+    """Merges the :class:`pandas.DataFrame`'s ontop of one another in the \
+    order given."""
     return pd.concat(dataframes, ignore_index=True, **kwargs)
 
 
 def zero_col(dataFrame):
-    """Creates a column the same length as the :class:`pandas.DataFrame` but \
-    filled with zeros."""
-    return pd.DataFrame(0, index=np.arange(len(dataFrame)), columns=['zeros'])
+    """Creates a column the same length as the :class:`pandas.DataFrame` \
+    but filled with zeros."""
+    return pd.DataFrame(0, index=np.arange(len(dataFrame)),
+                        columns = ['zeros'])
 
 
 def pick_row_max(column1, column2):
-    """Choses the maximum value between two :class:`pandas.DataFrame` columns \
-    and returns a single :class:`pandas.DataFrame` column."""
+    """Choses the maximum value between two :class:`pandas.DataFrame` \
+    columns and returns a single :class:`pandas.DataFrame` column."""
 
     # Join the dataframes side by side
     joined_df = pd.concat([column1, column2], axis=1)
@@ -34,8 +36,8 @@ def pick_row_max(column1, column2):
 
 
 def df_move_to_last_col(dataframe, column):
-    """Moves the specified column, given as a :class:`str`, to the end of the \
-    :class:`pandas.DataFrame`."""
+    """Moves the specified column, given as a :class:`str`, to the end of \
+    the :class:`pandas.DataFrame`."""
     
     # Obtain list of column names
     col_list = list(dataframe.columns)
@@ -64,16 +66,17 @@ def df_to_ML_input(dataframe):
     """Converts a dataframe to arrays ready for Machine Learning.
     
     Parameters:
-     - dataframe: A :class:`pandas.DataFrame`, containing only the observables \
-     you wish for ML, with 'signal' as the final column.
-    
+     - dataframe: A :class:`pandas.DataFrame`, containing only the
+                  observables you wish for ML, with 'signal' as the final
+                  column.
     
     Returns:
-     - observables: A 2d :class:`numpy.ndarray` containing all the observables \
-     corresponding to each event from the :class:`pandas.DataFrame`, in the same \
-     order as the columns;
-     - labels: A 1d :class:`numpy.ndarray` containing all the 'signal' values \
-     corresponding to each event's 'observables'."""
+     - observables: A 2d :class:`numpy.ndarray` containing all the
+                    observables corresponding to each event from the
+                    :class:`pandas.DataFrame`, in the same order as the
+                    columns;
+     - labels: A 1d :class:`numpy.ndarray` containing all the 'signal'
+               values corresponding to each event's 'observables'."""
     
     # Obtain list of observables.
     input_observables = list(dataframe.columns.values)
@@ -92,7 +95,8 @@ def df_to_ML_input(dataframe):
 
 ### Classes ###
 class ObservablesDataFrame(pd.DataFrame):
-    """A :class:`pandas.DataFrame` which must have a final column of type :class:`bool` named 'signal'."""
+    """A :class:`pandas.DataFrame` which must have a final column of type \
+    :class:`bool` named 'signal'."""
     
     def __init__(self, data, *args, columns=None, **kwargs):
         
@@ -115,53 +119,99 @@ class ObservablesDataFrame(pd.DataFrame):
 
 
     def get_signal(self):
-        """Returns a :class:`pandas.DataFrame` containing only the 'signal' \
-        events."""
+        """Returns a :class:`pandas.DataFrame` containing only the \
+        'signal' events."""
         return self[self.signal == True].reset_index(drop=True)
     get_s = get_signal
 
+    
     def get_background(self):
-        """Returns a :class:`pandas.DataFrame` containing only the 'background' \
-        events."""
+        """Returns a :class:`pandas.DataFrame` containing only the \
+        'background' events."""
         return self[self.signal == False].reset_index(drop=True)
     get_b = get_background
+    
+    
+    def train_test_sets(self, train_frac = 0.70):
+        """Returns two :class:`pandas.DataFrame`s randomly selected from \
+        dataframe for training & testing"""
+        return DW.split_data(self, train_frac = train_frac)
+    
+    
+    def cross_validation_sets(self, k = 3, shuffle=False):
+        """Iterats over the k-sets [Default 5] returning a training and \
+        testing :class:`ObservablesDataFrame`."""
+        
+        # Get signal and background indices
+        sindexes = np.array(self.get_s().index)
+        bindexes = np.array(self.get_s().index)
+        
+        # Randomly shuffle these indices
+        if shuffle:
+            np.random.shuffle(sindexes)
+            np.random.shuffle(bindexes)
+        
+        # Split indices into k-sets
+        sindexes = np.array_split(sindexes, k)
+        bindexes = np.array_split(bindexes, k)
+        
+        # Iterate over each set and return a training and testing dataset
+        for ki in range(k):
+            
+            # Get test and train indices for the kth dataset
+            test = (sindexes[ki], bindexes[ki])
+            train = (np.concatenate((*sindexes[:ki], *sindexes[ki+1:])),
+                     np.concatenate((*bindexes[:ki], *bindexes[ki+1:])))
+            
+            # Get sgn/bkg events and concatenate for test and train sets
+            yield (ObservablesDataFrame
+                                   .from_sb_dfs(self.get_s().loc[train[0]],
+                                                self.get_b().loc[train[1]]),
+                   ObservablesDataFrame
+                                   .from_sb_dfs(self.get_s().loc[test[0]],
+                                                self.get_b().loc[test[1]]))
     
     
     def ML_input(self):
         """Returns the dataframe as arrays ready for Machine Learning.
     
     Returns:
-     - observables: A 2d :class:`numpy.ndarray` containing all the observables \
-     corresponding to each event from the :class:`pandas.DataFrame`, in the same \
-     order as the columns;
-     - labels: A 1d :class:`numpy.ndarray` containing all the 'signal' values \
-     corresponding to each event's 'observables'."""
+     - observables: A 2d :class:`numpy.ndarray` containing all the
+                    observables corresponding to each event from the
+                    :class:`pandas.DataFrame`, in the same order as the
+                    columns;
+     - labels: A 1d :class:`numpy.ndarray` containing all the 'signal'
+               values corresponding to each event's 'observables'."""
         return df_to_ML_input(self)
     
+    
     def partition(self, observable, partition_value):
-        """Returns the dataframe partitioned at a given value on a given observable.
+        """Returns the dataframe partitioned at a given value on a given \
+        observable.
         
         Paramters:
          - observable: A :class:`str` containing a column name;
-         - partition_value: A :class:`float` to partition the dataframe on the given \
-         'observable'.
+         - partition_value: A :class:`float` to partition the dataframe on
+                            the given 'observable'.
         
         Returns:
-         - less_partition: An :class:`ODataFrame` containing the partition with \
-         observables less than the 'partition_value';
-         - greater_partition: An :class:`ODataFrame` containing the partition with \
-         observables greater than or equal to the 'partition_value'.
-        """
+         - less_partition: An :class:`ODataFrame` containing the partition
+                           with observables less than the 'partition_value';
+         - greater_partition: An :class:`ODataFrame` containing the
+                              partition with observables greater than or
+                              equal to the 'partition_value'."""
         
         if not observable in self:
-            raise ValueError("Parameter 'observable' must be a 'str' containing a " +
-                             f"column name, not '{observable}' of type " +
+            raise ValueError("Parameter 'observable' must be a 'str' " +
+                             "containing a column name, not " +
+                             f"'{observable}' of type " +
                              f"'{type(observable)}'.")
         
         mask = self[observable] < partition_value
     
-        return ObservablesDataFrame(self[mask]), ObservablesDataFrame(self[~mask])
-    
+        return (ObservablesDataFrame(self[mask]),
+                ObservablesDataFrame(self[~mask]))
+
     def copy(self):
         return ObservablesDataFrame(super().copy())
 
@@ -184,21 +234,47 @@ class ObservablesDataFrame(pd.DataFrame):
 
     @classmethod
     def from_sb_dfs(cls, signal_df, background_df, **kwargs):
-        """Given a signal and background dataframe, return an ObservablesDataFrame.
+        """Given a signal and background dataframe, return an \
+        ObservablesDataFrame.
         
         Paramters:
-         - signal_df: A :class:`numpy.ndarray` with the final column 'signal' \
-         containing only type :class:`bool`.
-         - background_df: A :class:`numpy.ndarray` with the final column 'signal' \
-         containing only type :class:`bool`.
+         - signal_df: A :class:`numpy.ndarray` with the final column
+                      'signal' containing only type :class:`bool`.
+         - background_df: A :class:`numpy.ndarray` with the final column
+                          'signal'  containing only type :class:`bool`.
         
         Returns:
-         - ODataFrame: An :class:`ObservablesDataFrame` combined from both \
-         'signal_df' and 'background_df'."""
+         - ODataFrame: An :class:`ObservablesDataFrame` combined from both
+                       'signal_df' and 'background_df'."""
 
         # Ensure dataframes have signal column at end
         cls.last_col_signal(signal_df)
         cls.last_col_signal(background_df)
 
         return cls(merge_dataframes(signal_df, background_df), **kwargs)
+    
+    
+    @classmethod
+    def from_ML_input(cls, observables, labels, columns, **kwargs):
+        """Given a signal and background dataframe, return an \
+        ObservablesDataFrame.
+        
+        Paramters:
+        - observables: A 2d :class:`numpy.ndarray` containing all the
+                    observables corresponding to each event from the
+                    :class:`pandas.DataFrame`, in the same order as the
+                    columns;
+        - labels: A 1d :class:`numpy.ndarray` containing all the 'signal'
+               values corresponding to each event's 'observables'.
+        
+        Returns:
+         - ODataFrame: An :class:`ObservablesDataFrame` combined from both
+                       'signal_df' and 'background_df'."""
+
+        # Merge arrays and transform to DataFrame
+        df = pd.DataFrame(np.c_[(observables,labels)], columns=columns)
+        
+        # Sort DataFrame by signal and convert to ObservablesDataFrame
+        return cls(df.sort_values(by='signal', axis='index')
+                   .reset_index(drop=True))
 ODataFrame = ObservablesDataFrame

@@ -141,44 +141,28 @@ def get_dataframe(collision):
     return DWDF.ODataFrame.from_sb_dfs(*odfs)
 
 
-def get_ML_dataframe(collision, train_frac = 0.70, train_test_split=True):
-    f"""Unpickles the 'ObservablesDataFrames' files, splits them into training \
-and testing sets and returns a dictionary of dataframes - with the optimal \
-observables for this collision.
+def get_opt_dataframe(collision):
+    f"""Unpickles the 'ObservablesDataFrames' files, splits them into \
+    training and testing sets and returns a dictionary of dataframes - \
+    with the optimal observables for this collision.
     
     Parameters:
      - collision: Must be from {DW.collisions};
      - train_frac: The approximate fraction of data to use for the training
-                   set (Default: 0.7).
+                   set [Default: 0.7].
     
     Returns:
-     - dict: A dictionary of 'ObservablesDataFrames' - with the optimal
-             observables for the given collision. The keys are 'train' and
-             'test'."""
-    
-    # Validate train_frac parameter
-    if not (0 < train_frac < 1):
-        raise ValueError("The training fraction must be between 0 and 1, " +
-                         f"not {train_frac}.")
+     - opt_dataframe: An :class:`dwrangling.dataframes.ODataFrames` with the
+                      optimal observables for the given collision."""
     
     # Retrieve the ObservablesDataFrame for the collision
     dataframe = get_dataframe(collision)
     
-    # Add the reconstructed observables
-    dataframe = DWDFO.add_reconstructed_observables(dataframe)
-    
     # Get the optimal observables dataframe
-    dataframe = DWDFO.get_ML_observables_dataframe(collision,
-                                                              dataframe)
+    dataframe = DWDFO.get_opt_observables_dataframe(collision, dataframe)
     
-    # Split the dataframe into training and testing sets.
-    if train_test_split:
-        dataframes = tuple(DW.split_data(dataframe, train_frac = train_frac).values())
-    else:
-        dataframes = dataframe
-    
-    # Return the Machine Learning ready dataframe dictionary.
-    return dataframes
+    # Return the collision's optimal dataframe.
+    return dataframe
 
 
 df_to_ML_input = DW.df_to_ML_input

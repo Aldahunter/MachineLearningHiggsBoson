@@ -17,7 +17,9 @@ comma_space = ', '
 collisions = ['pp_2mu2e', 'pp_2mu2nu']
 
 #: Optimal collision observables.
-collision_observables = {'pp_2mu2e': ['m_H', 'Z_mu_rap', 'Z_e_rap', 'mu-_px', 'e-_py'],
+collision_observables = {'pp_2mu2e': ['Z_e_m', 'Z_mu_m',
+                                      'delR_e', 'delR_mu', 'delR_Z',
+                                      'm_H'],
                          'pp_2mu2nu': []}
 
 
@@ -70,7 +72,7 @@ def pickle_object(object, file_path):
     """Pickles (saves) an 'object' at the location 'file_path'."""
     with open(file_path, 'wb') as output:
         pickle.dump(object, output, pickle.HIGHEST_PROTOCOL)
-    print(f"Successfully pickled '{FILE.split(bs)[-1]}'")
+    print(f"Successfully pickled '{file_path.split(bs)[-1]}'")
 
 def unpickle_object(file_path):
     """Unpickles (loads) and returns an 'object' at the location 'file_path'."""
@@ -102,7 +104,8 @@ def get_collision_observables(collision):
     collision = collision.strip()
     if not collision in collisions:
         raise ValueError(f"'{collision}' is not a valid collision name. " +
-                         f"You can choose from: {comma_space.join(collisions)}.")
+                         "You can choose from: " +
+                         f"{comma_space.join(collisions)}.")
     
     return collision_observables[collision]
 
@@ -124,22 +127,23 @@ def split_data(dataframe, train_frac = 0.70):
         raise ValueError("The training fraction must be between 0 and 1, " +
                          f"not {train_frac}.")
     
-    # Calculate train set size
-    train_size = int( len(dataframe) * train_frac)
+    # Calculate the train sample size from its fraction
+    train_size = int(len(dataframe) * train_frac)
     
-    # Randomly sample dataframe for train set and order by signal
+    # Randomly sample the train set from the dataframe and order by signal
     train = dataframe.sample(train_size).sort_values('signal')
     
-    # Obtain events from dataframe not in the train set
-    test = dataframe.loc[[(index not in train.index) for index in dataframe.index]]
+    # Select the complement set from the dataframe for tests
+    test = dataframe.loc[[(index not in train.index)
+                          for index in dataframe.index]]
     
-    # Reset indexes
-    train = train.reset_index(level=None, drop=True)
+    # Reset the indexes so go from 0 to N
     test = test.reset_index(level=None, drop=True)
+    train = train.reset_index(level=None, drop=True)
     
     # Return as ObservableDataFrames
     return DWDF.ODataFrame(train), DWDF.ODataFrame(test)
-
+    
 
 
 ### File Functions ###

@@ -1,8 +1,10 @@
+"""A module to hold the classes associated with a Binary Decision Tree \
+classifier."""
+
 ### Imports ###
 from copy import deepcopy
-
 import dwrangling.dataframes as DWDF
-import trees.functions as TF
+import trees._BinaryDecisionTree._BDTFuncs as _BDTF
 
 
 
@@ -34,6 +36,7 @@ class NoneNode(object):
     def depth(self): return self._depth
 
 
+    
 class TreeNode(object):
     
     # Initialise TreeNode.
@@ -94,7 +97,7 @@ class TreeLeaf(TreeNode):
         # Define inherited attributes.
         super().__init__(labels, depth, impurity_fn)
         
-        # Define singal probability attribute.
+        # Define signal probability attribute.
         self._P = P
         
     # Define how probability attribute is obtained.
@@ -107,8 +110,9 @@ class TreeLeaf(TreeNode):
         # If rounded show values to 2 digits.
         digits = 2 if rounded else 16
         
-        # Show singal probability and inherited properties, seperated by '|'.
-        return f"P:{self.P:.{digits}f}| " + super().__str__(trimmed, rounded)
+        # Show singal prob. and inherited properties, seperated by '|'.
+        return f"P:{self.P:.{digits}f}| " + super().__str__(trimmed,
+                                                            rounded)
 
     def __repr__(self):
         return self.__str__()
@@ -119,7 +123,7 @@ class TreeBranch(TreeNode):
                           
     # Initialise TreeBranch.
     def __init__(self, split_value, observables, labels, depth, impurity_fn,
-                 cost, n_obsv, **kwargs):
+                 minimise_fn, cost, n_obsv, **kwargs):
         
         # Define inherited attributes.
         super().__init__(labels, depth, impurity_fn)
@@ -130,13 +134,13 @@ class TreeBranch(TreeNode):
         self._n_obsv = n_obsv
         
         # Find partitions for this observable and partition value.
-        partitions = TF.partition_data(observables, labels, split_value, n_obsv)
+        partitions = _BDTF.partition_data(observables, labels,
+                                          split_value, n_obsv)
         
         # Find the subtrees from these partitions.
-        self._subtrees = tuple(TF.grow_tree(observables, labels,
-                                            impurity_fn = impurity_fn,
-                                            depth = self._depth + 1,
-                                            **kwargs)
+        self._subtrees = tuple(_BDTF._grow_branch(observables, labels,
+                                                  impurity_fn, minimise_fn,
+                                                  self._depth + 1, **kwargs)
                                for observables, labels in partitions)
         
     # Define how tree attributes are obtained.
@@ -175,10 +179,10 @@ class TreePath(object):
     def __init__(self, root_node, P):
         self._P = P
         self._tree = root_node
-        self._leaves = TF.get_num_leaves(root_node)
+        self._leaves = _BDTF.get_num_leaves(root_node)
     
     def __str__(self):
-        return f"TreePath( To probability: {self.P}; with n_leaves: {self._leaves})"
+        return f"TreePath(Probability: {self.P}; n_leaves: {self._leaves})"
     __repr__ = __str__
 
     def __getitem__(self, key):
@@ -187,17 +191,25 @@ class TreePath(object):
 
     def show(self, spacing=' ', trimmed=True, rounded=True):
         """Prints the tree to stdout."""
-        TF.show_tree(self.tree, 'Root', spacing, trimmed, rounded)
+        _BDTF.show_tree(self.tree, 'Root', spacing, trimmed, rounded)
     
     def get_depth(self):
-        return TF.tree_depth(self.tree)
+        return _BDTF.tree_depth(self.tree)
     
     def get_paths(self):
         """Returns a :class:`tuple` of paths, where each path is a :class:`tuple` \
         of 1 character :class:`str` and each :class:`str` is either '<' (less than \
         branch) or '>' (greater than branch)."""  
-        paths = TF.get_split_order(self.tree, self.P)[-1]
+        paths = _BDTF.get_split_order(self.tree, self.P)[-1]
         return [path[::-1] for path in paths]
+    
+    def get_observable_paths(self, observables):
+        obs_index = {n_obs: obs for n_obs, obs in enumerate(observables)}
+        obs_paths = _BDTF.get_observable_path(self.tree,
+                                              self.P,
+                                              obs_index)[-1]
+        return [obs_path[::-1] for obs_path in obs_paths]
+                     
     
     def get_samples(self, dataframe):
         """Returns a list of dataframes one for each leaf sample.
@@ -215,7 +227,7 @@ class TreePath(object):
                              f"'{type(dataframe)}'.")
         
         paths = self.get_paths()          
-        return TF.get_node_samples(self.tree, dataframe, paths)
+        return _BDTF.get_node_samples(self.tree, dataframe, paths)
     
     def get_path_sample_generators(self, dataframe):
         """Returns a list of generators one for each path to each leaf.
@@ -238,7 +250,8 @@ class TreePath(object):
         
         generators = []
         for path in self.get_paths():
-            generators.append(TF.yield_path_samples(self.tree, dataframe, path))
+            generators.append(_BDTF.yield_path_samples(self.tree,
+                                                       dataframe, path))
         return generators
 
 
@@ -248,7 +261,3 @@ class TreePath(object):
     def tree(self): return self._tree
     @property
     def leaves(self): return self._leaves
-
-                     
-                     
-        
