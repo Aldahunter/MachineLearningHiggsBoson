@@ -1,10 +1,10 @@
 """A library to hold a Binary Decision Tree classifier and its associated \
 functions and classes."""
 import numpy as np
-import trees.functions as TF
+
 import trees._BaseClasses as _BC
-import trees._BinaryDecisionTree._BDTFuncs as _BDTF
 import trees._BinaryDecisionTree._BDTClasses as _BDTC
+import trees._BinaryDecisionTree._BDTFuncs as _BDTF
 
 
 class _BinaryTreeEstimator(_BC.BaseEstimator):
@@ -21,13 +21,13 @@ class _BinaryTreeEstimator(_BC.BaseEstimator):
                 'random_minimize':None}
     
     
-    def _fit(self, observables, labels, impurity_fn=TF.gini_impurity,
-              **hyparams):
+    def _fit(self, observables, labels, sample_weights, impurity_fn,
+             **hyparams):
         self._hparams.update(hyparams)
-        self._tree = _BDTF.grow_tree(observables, labels, impurity_fn,
-                                     **self._hparams)
+        self._tree = _BDTF.grow_tree(observables, labels, sample_weights, 
+                                     impurity_fn, **self._hparams)
     
-    def _predictions(self, observables, label=None):
+    def _predictions(self, observables, label=None, **kwargs):
         return np.fromiter( (_BDTF.predict_tree(datum, self.tree)
                              for datum in observables ),
                            float, len(observables))
@@ -57,10 +57,7 @@ class _BinaryTreeEstimator(_BC.BaseEstimator):
     @property
     def tree(self): return self._tree
     
-    # Define how classifier is indexed.
     def __getitem__(self, key):
-        
-        # If indexed, return indexed root node.
         return self.tree[key]
    
 

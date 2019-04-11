@@ -1,13 +1,11 @@
 """A Random Forest Classifier."""
-import ctypes
-import numpy as np
 import multiprocessing as mp
-from multiprocessing import sharedctypes as shared
-import trees.functions as TF
+
+import numpy as np
+
 import trees._BaseClasses as _BC
 import trees._RandomForest._RandomForestFuncs as _RFF
-from trees._BinaryDecisionTree \
-    import _BinaryTreeEstimator as BDTE, _BinaryTreeClassifier as BDTC
+from trees._BinaryDecisionTree import _BinaryTreeClassifier as BDTC, _BinaryTreeEstimator as BDTE
 
 
 class _RandomForestEstimator(_BC.BaseClassifier):
@@ -23,7 +21,7 @@ class _RandomForestEstimator(_BC.BaseClassifier):
                 'voting':'soft', 'replacement':True}
     
     
-    def _fit(self, observables, labels, impurity_fn=TF.gini_impurity,
+    def _fit(self, observables, labels, sample_weights, impurity_fn,
              inform=False, processes=-1, timeout=True, OOBtest=False,
              **hyparams):
         
@@ -178,17 +176,10 @@ class _RandomForestEstimator(_BC.BaseClassifier):
                     * c*n_events * d*np.log(e*n_events)) + 1
     
     
-    def __repr__(self):
-        return (f"RandomForest(Fitted: {self._fitted}; "
-                + self._hparams.__repr__()[1:-1] + ")")
-    __str__ = __repr__
-    
-    def __getitem__(self, key):
-        return self._hparams[key]
-    
-    def __iter__(self):
+    def __iter__(self): 
         return iter(self._forest)
 
+    
     
 class _RandomForestClassifier(_RandomForestEstimator, _BC.BaseClassifier):
     __sclass__ = "RandomForestClassifier"

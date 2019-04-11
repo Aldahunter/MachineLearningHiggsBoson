@@ -1,27 +1,34 @@
 """A module to hold the functions associated with a Binary Decision Tree \
 classifier."""
 import random
-import numpy as np
 from copy import deepcopy
+from warnings import catch_warnings, simplefilter as warnings
+
+import numpy as np
 from scipy.optimize import minimize_scalar
+
 import trees._BinaryDecisionTree._BDTClasses as _BDTC
 
 
 ### Fiting Functions ###
-def partition_data(observables, labels, partition_value, n_obsv):
+def partition_data(observables, labels, sample_weights, partition_value,
+                   n_obsv):
     """Partitions a sample on a given observable at a given value."""
     
     # Create condition for splitting data
     condition = observables[:,n_obsv] < partition_value
     
     # Create partitons from data.
-    partitions = ((observables[condition], labels[condition]),  # Less than.
-                  (observables[~condition], labels[~condition])) # Greater.
+    partitions = ((observables[condition], labels[condition],
+                   sample_weights[condition]),  # Less than.
+                  (observables[~condition], labels[~condition],
+                   sample_weights[~condition])) # Greater.
     
     # Return partitions.
     return partitions
 
-def CART_cost(partitions, total_samples, impurity_fn, **kwargs):
+
+def CART_cost(partitions, total_weight, impurity_fn, **kwargs):
     """Calculates the cost of a sample using the CART algorithm with the \
     impurity function."""
     
@@ -32,28 +39,31 @@ def CART_cost(partitions, total_samples, impurity_fn, **kwargs):
     
     # Iterate through each partition
     cost = 0.0
-    for observables, labels in partitions:
+    for observables, labels, weights in partitions:
+        
+        # Get the total number of samples in the partition
+        sample_size = len(labels)
         
         # Check each partition's size is large enough to split.
-        partition_samples = len(labels)
-        if len(labels) < min_samples:
+        if sample_size < min_samples:
             # Otherwise return the difference plus one,
             # so this can me minimizied towards an allowed value.
-            return (min_samples - partition_samples + 1)
+            return (min_samples - sample_size + 1)
         
         # Find number of labels with value 1 and value 0 [when
         # each label is either 1 or 0].
-        partition_values = (labels.sum(), partition_samples - labels.sum())
+        partition_node_weight = weights.sum()
+        partition_weights = (weights[labels].sum(), weights[~labels].sum())
         
         # Find the impurity for the partition.
-        partition_impurity = impurity_fn(partition_values,
-                                         partition_samples)
+        partition_impurity = impurity_fn(partition_weights,
+                                         partition_node_weight)
         
         # Add to the running cost for these partitions
-        cost += (partition_samples / total_samples) * partition_impurity
+        cost += partition_node_weight * partition_impurity
     
     # Return the cost for these partitions.
-    return cost
+    return cost / total_weight
 
 
 def small_partition_sample(n_splits, bounds):
@@ -70,7 +80,6 @@ class randomResult(object):
         self.x = value
 def random_minimize(n_splits, randsample_func, cost_fn, method=None,
                     bounds=(None, None)):
-    
     best_value, minimum_cost = None, float('inf')
     partition_sample = randsample_func(n_splits, bounds)
     for partition_value in partition_sample:
@@ -82,8 +91,8 @@ def random_minimize(n_splits, randsample_func, cost_fn, method=None,
     return randomResult(minimum_cost, best_value)
         
 
-def find_partition(observables, labels, size, impurity_fn, minimise_fn,
-                   kwargs):
+def find_partition(observables, labels, sample_weights, total_weight,
+                   impurity_fn, minimise_fn, kwargs):
     """returns (n_observable, partition_value, CART_cost)"""
     
     # Create dictionary to hold optimal partition values for
@@ -94,7 +103,7 @@ def find_partition(observables, labels, size, impurity_fn, minimise_fn,
     v_mins = observables.min(axis=0)
     v_maxs = observables.max(axis=0)
     
-    # Get random indices of observables to sampe for partition
+    # Get random indices of observables to sample for partition
     sample_observables = range(observables.shape[1])
     if kwargs['max_observables']:
         # Shuffle indices and take the first 'max_features' amount
@@ -109,18 +118,20 @@ def find_partition(observables, labels, size, impurity_fn, minimise_fn,
         def cost_fn(partition_value):
             
             # Partition data on partition value.
-            partitions = partition_data(observables, labels,
+            partitions = partition_data(observables, labels, sample_weights,
                                         partition_value, n_obsv)
             
-            # Return the CART cost of this partition.
-            return CART_cost(partitions, size, impurity_fn=impurity_fn,
-                             **kwargs)
+            # Return the CART cost of this partition (1.0 is total samp. w.)
+            return CART_cost(partitions, total_weight,
+                             impurity_fn=impurity_fn, **kwargs)
 
         # Minimize the cost function to find optimal partition value
-        optimize_result = minimise_fn(cost_fn, method='Bounded',
-                                      bounds=(v_mins[n_obsv],
-                                              v_maxs[n_obsv]))
-        
+        with catch_warnings():
+            warnings("ignore")  # Ignore warning whilst exploring partitions
+            optimize_result = minimise_fn(cost_fn, method='Bounded',
+                                          bounds=(v_mins[n_obsv],
+                                                  v_maxs[n_obsv]))
+
         # Add (observable index, and optimal partition value) to dictionary,
         # indexed by their CART cost.
         optimize_results[optimize_result.fun] = (n_obsv, optimize_result.x)
@@ -134,8 +145,8 @@ def find_partition(observables, labels, size, impurity_fn, minimise_fn,
             min_cost)                      # and CART cost.
 
 
-def _grow_branch(observables, labels, impurity_fn, minimise_fn, depth,
-                 **kwargs):
+def _grow_branch(observables, labels, sample_weights, impurity_fn, 
+                 minimise_fn, depth, **kwargs):
     """Grows a Binary Decision Tree's branch from the sample data given.
     
     Parameters:
@@ -144,6 +155,9 @@ def _grow_branch(observables, labels, impurity_fn, minimise_fn, depth,
                     dtype=:class:`float` );
      - labels: A :class:`numpy.array` ( [label_1, label_2, ...],
                dtype=:class:`bool` );
+     - sample_weights: A :class:`numpy.array` ( [weight_1, weight_2, ...],
+                       dtype=:class:`float` ) specifying the weights of each
+                       event, or :class:`None`. [Default 'None'];
      - impurity_fn: A scalar :class:`function` whose output is to be
                     minimised when branching. It must take two parameters:
                      + class_sizes: A :class:`list` of :class:`int`s
@@ -161,49 +175,52 @@ def _grow_branch(observables, labels, impurity_fn, minimise_fn, depth,
     Returns:
      - Root: The root :class:`trees.nodes.TreeBranch` of the fitted tree."""
     
-    # Get number of events
-    size = float(len(labels))
+    # Ensure labels are booleans
+    assert labels.dtype == bool
     
-    # Calculate the number of 'True' labels, if none create a leaf.
-    n_true = labels.sum() # Each label is either 0 or 1.
-    if n_true == 0:
-        return _BDTC.TreeLeaf(0.0, observables, labels,
-                              depth, impurity_fn)
+    # Get number of events and total weight of samples in this node
+    size = len(labels)
+    total_weight = sample_weights.sum()
     
-    # Check is passed max depth of the tree.
+    # Calculate the nodes 'True' label probability
+    probability = sample_weights[labels].sum() / total_weight
+    
+    # If node is purely one label type then create leaf
+    if (probability == 0) or (probability == 1):
+        return _BDTC.TreeLeaf(probability, observables, labels, depth,
+                              sample_weights, impurity_fn)
+    
+    # Check is passed max depth of the tree
     if kwargs.get('max_depth') == depth:
-        return _BDTC.TreeLeaf(n_true / size, observables, labels,
-                              depth, impurity_fn)
-    # Check we have enough sample to partition.
+        return _BDTC.TreeLeaf(probability, observables, labels,
+                              depth, sample_weights, impurity_fn)
+    # Check we have enough sample to partition
     if kwargs.get('min_samples_split'):
         if size < kwargs.get('min_samples_split'):
-            return _BDTC.TreeLeaf(n_true / size, observables, labels,
-                                  depth, impurity_fn)
-    
-    # Calculate the number of 'False' labels, if none create a leaf.
-    n_false = size - n_true
-    if n_false == 0:
-        return _BDTC.TreeLeaf(1.0, observables, labels,
-                              depth, impurity_fn)
-    
+            return _BDTC.TreeLeaf(probability, observables, labels,
+                                  depth, sample_weights, impurity_fn)
     
     # Find the best observable, its value, and its cost, to partition
-    # samples on.
+    # samples on
     n_obsv, partition_value, cost = find_partition(observables, labels,
-                                                   size, impurity_fn,
-                                                   minimise_fn, kwargs)
+                                                   sample_weights,
+                                                   total_weight,
+                                                   impurity_fn, minimise_fn,
+                                                   kwargs)
     
     # If it can't split (e.g. min_leaf_sample to high), than the cost
-    # is greater than 1, so create a leaf.
+    # is greater than 1, so create a leaf
     if cost > 1.0:
-        return _BDTC.TreeLeaf(float(n_true / size), observables, labels,
-                              depth, impurity_fn)
+        return _BDTC.TreeLeaf(probability, observables, labels,
+                              depth, sample_weights, impurity_fn)
     
-    # Else create a branch with this observable and partition value.
+    # Else create a branch with this observable and partition value
     return _BDTC.TreeBranch(partition_value, observables, labels, depth,
-                           impurity_fn, minimise_fn, cost, n_obsv, **kwargs)
+                            sample_weights, impurity_fn, minimise_fn, cost,
+                            n_obsv, **kwargs)
 
-def grow_tree(observables, labels, impurity_fn, **kwargs):
+
+def grow_tree(observables, labels, sample_weights, impurity_fn, **kwargs):
     """Grows (fits) a tree to the data given.
     
     Parameters:
@@ -212,6 +229,9 @@ def grow_tree(observables, labels, impurity_fn, **kwargs):
                     dtype=:class:`float` );
      - labels: A :class:`numpy.array` ( [label_1, label_2, ...],
                dtype=:class:`bool` );
+     - sample_weights: A :class:`numpy.array` ( [weight_1, weight_2, ...],
+                       dtype=:class:`float` ) specifying the weights of each
+                       event, or :class:`None`. [Default 'None'];
      - impurity_fn: A scalar :class:`function` whose output is to be
                     minimised when branching. It must take two parameters:
                      + class_sizes: A :class:`list` of :class:`int`s
@@ -227,11 +247,6 @@ def grow_tree(observables, labels, impurity_fn, **kwargs):
     
     Returns:
      - Root: The root :class:`trees.nodes.TreeBranch` of the fitted tree."""
-    
-    # Ensure observables and labels match-up.
-    if not len(observables) == len(labels):
-        raise ValueError(f"Observables and labels must have the same first \
-        dimension. You have given {len(observables)} and {len(labels)}.")
     
     # If randomised partition cuts are wanted create a partial function to
     # use for minimisation, dependent on the number of partition values
@@ -255,10 +270,10 @@ def grow_tree(observables, labels, impurity_fn, **kwargs):
             
     # Set optimise minimize function to use for minimisation
     else: minimise_fn = minimize_scalar
-        
+    
     # Grow tree from root branch
-    return _grow_branch(observables, labels, impurity_fn, minimise_fn, 0,
-                        **kwargs)
+    return _grow_branch(observables, labels, sample_weights, impurity_fn,
+                        minimise_fn, 0, **kwargs)
 
 
 

@@ -3,9 +3,9 @@ classifier."""
 
 ### Imports ###
 from copy import deepcopy
+
 import dwrangling.dataframes as DWDF
 import trees._BinaryDecisionTree._BDTFuncs as _BDTF
-
 
 
 ### Classes ####
@@ -40,7 +40,7 @@ class NoneNode(object):
 class TreeNode(object):
     
     # Initialise TreeNode.
-    def __init__(self, labels, depth, impurity_fn):
+    def __init__(self, labels, depth, sample_weights, impurity_fn):
         
         # Define attributes.
         self._depth = depth
@@ -51,7 +51,9 @@ class TreeNode(object):
                          'B': len(labels) - labels.sum()}  #  in labels.
         
         # Calculate nodes impurity.
-        self._impurity = impurity_fn(self._classes.values(), self._size)
+        self._impurity = impurity_fn((sample_weights[labels].sum(),
+                                      sample_weights[~labels].sum()),
+                                      sample_weights.sum())
     
     # Define how attributes are obtained.
     @property
@@ -92,10 +94,11 @@ class TreeNode(object):
 class TreeLeaf(TreeNode):
                           
     # Initialise TreeLeaf.
-    def __init__(self, P, observables, labels, depth, impurity_fn):
+    def __init__(self, P, observables, labels, depth, sample_weights,
+                 impurity_fn):
         
         # Define inherited attributes.
-        super().__init__(labels, depth, impurity_fn)
+        super().__init__(labels, depth, sample_weights, impurity_fn)
         
         # Define signal probability attribute.
         self._P = P
@@ -122,11 +125,12 @@ class TreeLeaf(TreeNode):
 class TreeBranch(TreeNode):
                           
     # Initialise TreeBranch.
-    def __init__(self, split_value, observables, labels, depth, impurity_fn,
-                 minimise_fn, cost, n_obsv, **kwargs):
+    def __init__(self, split_value, observables, labels, depth,
+                 sample_weights, impurity_fn, minimise_fn, cost,
+                 n_obsv, **kwargs):
         
         # Define inherited attributes.
-        super().__init__(labels, depth, impurity_fn)
+        super().__init__(labels, depth, sample_weights, impurity_fn)
         
         # Define branch attributes.
         self._split = split_value
@@ -135,13 +139,14 @@ class TreeBranch(TreeNode):
         
         # Find partitions for this observable and partition value.
         partitions = _BDTF.partition_data(observables, labels,
+                                          sample_weights,
                                           split_value, n_obsv)
         
         # Find the subtrees from these partitions.
-        self._subtrees = tuple(_BDTF._grow_branch(observables, labels,
+        self._subtrees = tuple(_BDTF._grow_branch(*partition_set,
                                                   impurity_fn, minimise_fn,
                                                   self._depth + 1, **kwargs)
-                               for observables, labels in partitions)
+                               for partition_set in partitions)
         
     # Define how tree attributes are obtained.
     @property
@@ -197,9 +202,9 @@ class TreePath(object):
         return _BDTF.tree_depth(self.tree)
     
     def get_paths(self):
-        """Returns a :class:`tuple` of paths, where each path is a :class:`tuple` \
-        of 1 character :class:`str` and each :class:`str` is either '<' (less than \
-        branch) or '>' (greater than branch)."""  
+        """Returns a :class:`tuple` of paths, where each path is a \
+        :class:`tuple` of 1 character :class:`str` and each :class:`str` \
+        is either '<' (less than branch) or '>' (greater than branch)."""  
         paths = _BDTF.get_split_order(self.tree, self.P)[-1]
         return [path[::-1] for path in paths]
     
@@ -215,15 +220,17 @@ class TreePath(object):
         """Returns a list of dataframes one for each leaf sample.
     
         Paramters:
-         - dataframe: A :class:`dwrangling.dataframe.ODataFrame` to sample from. 
+         - dataframe: A :class:`dwrangling.dataframe.ODataFrame` to sample
+                      from. 
 
         Returns:
-         - samples: A :class:`list` of :class:`dwrangling.dataframe.ODataFrame` \
-         dataframes, one for each leaf node."""
+         - samples: A :class:`list` of
+                    :class:`dwrangling.dataframe.ODataFrame` dataframes, one
+                    for each leaf node."""
                      
         if not isinstance(dataframe, DWDF.ODataFrame):
-            raise ValueError("The 'dataframe' must be of type " +
-                             f"'{type(DWDF.ODataFrame)}', not " +
+            raise ValueError("The 'dataframe' must be of type "
+                             f"'{type(DWDF.ODataFrame)}', not "
                              f"'{type(dataframe)}'.")
         
         paths = self.get_paths()          
@@ -233,20 +240,26 @@ class TreePath(object):
         """Returns a list of generators one for each path to each leaf.
     
         Paramters:
-         - dataframe: A :class:`dwrangling.dataframe.ODataFrame` to sample from. 
+         - dataframe: A :class:`dwrangling.dataframe.ODataFrame` to sample
+                      from. 
 
         Returns:
-         - samples: A :class:`tuple` :class:`generator`, where each :class:`tuple` contains:
-             + observable: A :class:`str` holding the observable which was partitioned on;
-             + partition_value: A :class:`float` for the value of the observable used to\
-             partition the data;
-             + branch: A 1 character :class:`str` to determine which branch to take, '<' is \
-             the 'less than branch' and '>' is the 'greater than or equal to' branch;
-             + sample: A :class:`dwrangling.dataframe.ODataFrame` holding that node's sample."""
+         - samples: A :class:`tuple` :class:`generator`, where each
+                    :class:`tuple` contains:
+             + observable: A :class:`str` holding the observable which was
+                           partitioned on;
+             + partition_value: A :class:`float` for the value of the
+                                observable used to partition the data;
+             + branch: A 1 character :class:`str` to determine which branch
+                       to take, '<' is the 'less than branch' and '>' is the
+                       'greater than or equal to' branch;
+             + sample: A :class:`dwrangling.dataframe.ODataFrame` holding
+                       that node's sample."""
                      
         if not isinstance(dataframe, DWDF.ODataFrame):
-            raise ValueError("The 'dataframe' must be of type '{type(DWDF.ODataFrame)}', " +
-                             f"not '{type(dataframe)}'.")
+            raise ValueError("The 'dataframe' must be of type "
+                             f"'{type(DWDF.ODataFrame)}', not "
+                             f"'{type(dataframe)}'.")
         
         generators = []
         for path in self.get_paths():

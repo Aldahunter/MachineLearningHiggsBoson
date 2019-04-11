@@ -1,20 +1,22 @@
 """Classifier Outputs - Plotting functions for the Machine Learning \
 Outputs from the classifiers"""
 
-import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
+from collections import OrderedDict
+from typing import Dict, Any, Union, Iterable
+
 import matplotlib.collections as mc
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
+import numpy as np
 from mpl_toolkits.axes_grid1.axes_divider import make_axes_locatable
 from mpl_toolkits.axes_grid1.colorbar import colorbar
+from numpy.core._multiarray_umath import ndarray
 from scipy.stats import norm
-from collections import OrderedDict
 
-import dwrangling as DW
 import analysis.metrics as AME
 import analysis.misc as AMI
 import analysis.plotting as AP
-
+import dwrangling as DW
 
 
 ### Functions ###
@@ -156,11 +158,11 @@ def plot_confusion_matrix(labels, labels_predicted, p_thres=0.5,
     return fig
 
 
-def plot_results(classifier, result_pairs, p_threshold=0.5, n_bins=50,
+def plot_results(classifier, result_pairs, p_threshold=0.5, n_bins='auto',
                  csgn=None, cbkg=None, alpha=0.5, hist=False, fontsize=25.5,
                  observables="", obs_pos=(0,0), cm_pos=(0,0), cm_scale=1,
                  y_max=None, xlabelpad=0.0, ylabelpad=0.0, ydifpad=0.0,
-                 **plotstyles):
+                 x_range=None, bin_edges='auto', **plotstyles):
     
     # Check results dictionary
     AMI._check_results_dict(result_pairs)
@@ -183,13 +185,17 @@ def plot_results(classifier, result_pairs, p_threshold=0.5, n_bins=50,
         for labels, labels_pred in result_pairs.values():
             centers |= set(labels_pred)
         centers = sorted(centers)
-    else:
-        # Get evenly spaced midpoints
-        centers = np.linspace(0, 1, n_bins + 1)
+        bin_edges = [(p0+p1)/2 for p0, p1 in zip(centers[:-1], centers[1:])]
+        bin_edges = np.array([0.0,] + bin_edges + [1.0,])
     
-    # Get bin edges
-    bin_edges = [(p0+p1)/2 for p0, p1 in zip(centers[:-1], centers[1:])]
-    bin_edges = np.array([0.0,] + bin_edges + [1.0,])
+    else:
+        all_results = np.concatenate([type_results[1] for type_results
+                                      in result_pairs.values()])
+        bin_edges = np.histogram_bin_edges(all_results, bins=n_bins,
+                                           range=x_range)
+        centers = np.array([(l + u) / 2
+                            for l, u in zip(bin_edges[:-1], bin_edges[1:])])
+        
     
     # Set-up figure and main axis
     fig = plt.figure(figsize=(12.00,10.00))
@@ -200,13 +206,13 @@ def plot_results(classifier, result_pairs, p_threshold=0.5, n_bins=50,
     cbkg = AP.std_cmap(0.0) if (cbkg is None) else cbkg
     
     # Get plotting asthetics if not given use standard
-    _plotstyles = {'styles':None, 'markers':None, 'hatches':None}
+    _plotstyles = {'styles':None, 'markers':None, 'square':'mid'}
     _plotstyles.update(plotstyles)
-    styles, markers, hatches = AP._get_plotting_style(result_pairs.keys(),
+    styles, markers = AP._get_plotting_style(result_pairs.keys(),
                                                       **_plotstyles)
     
     # Iterate through train and test data
-    histograms = OrderedDict()
+    histograms: OrderedDict[Any, Dict[str, Union[ndarray, Iterable, int, float]]] = OrderedDict()
     for n, (key, type_results) in enumerate(result_pairs.items()):
         
         # Seperate signal and background
@@ -217,9 +223,9 @@ def plot_results(classifier, result_pairs, p_threshold=0.5, n_bins=50,
         
         # Create bins for histograms
         histogram = {'s': np.histogram(results['s'],
-                                       bin_edges, density = True)[0],
+                                       bins=bin_edges, density = True)[0],
                      'b': np.histogram(results['b'],
-                                       bin_edges, density = True)[0]}
+                                       bins=bin_edges, density = True)[0]}
         histograms[key] = histogram
         
         # Find bin widths and centers
@@ -234,12 +240,12 @@ def plot_results(classifier, result_pairs, p_threshold=0.5, n_bins=50,
                    align='edge', color=csgn, label='Signal',
                    alpha=alpha, zorder=2*n+1)
         else:
-            ax.plot(centers, histogram['b'], marker=markers[key],
-                    ls='', color=cbkg, markersize=13,
-                    label=f'Background {key}', alpha=1.0, zorder=2*n)
-            ax.plot(centers, histogram['s'], marker=markers[key],
-                    ls='', color=csgn, markersize=13,
-                    label=f'Signal {key}', alpha=1.0, zorder=2*n+1)
+            ax.plot(centers, histogram['b'], #marker=markers[key],
+                    ls=styles[key], color=cbkg, #markersize=13,
+                    label=f'Background [{key}]', alpha=1.0, zorder=2*n)
+            ax.plot(centers, histogram['s'], #marker=markers[key],
+                    ls=styles[key], color=csgn, #markersize=13,
+                    label=f'Signal [{key}]', alpha=1.0, zorder=2*n+1)
     
     # Add p_threshold line to plot
     ax.axvline(p_threshold, linestyle='--', color='black')
@@ -252,9 +258,9 @@ def plot_results(classifier, result_pairs, p_threshold=0.5, n_bins=50,
         inital, deviations = list(histograms.keys())[0], {}
         for sb in ['b', 's']:
             
-            deviation, N = 0.0, 0.0 
+            deviation, N = 0.0, 0.0
             for key in list(histograms.keys())[1:]:
-                deviation += histograms[key][sb]-histograms[inital][sb]
+                deviation += histograms[key][sb] - histograms[inital][sb]
                 N += 1.0
             deviation /= N
             deviations[sb] = deviation
@@ -295,7 +301,8 @@ def plot_results(classifier, result_pairs, p_threshold=0.5, n_bins=50,
                               label_fontsize=fontsize*0.7)
     
     # Set axes limits
-    ax.set_xlim(0.0, 1.0)
+    if x_range is not None:
+        ax.set_xlim(*tuple(x_range))
     ax.set_ylim(0.0, y_max)
     if n_results > 1:
         ax_dist.set_xlim(0)
@@ -351,7 +358,8 @@ def plot_results(classifier, result_pairs, p_threshold=0.5, n_bins=50,
     ax.legend(loc="upper left", prop=prop, framealpha=0.8)
     
     # Reset axes limits
-    ax.set_xlim(0.0, 1.0)
+    if x_range is not None:
+        ax.set_xlim(*tuple(x_range))
     ax.set_ylim(0.0, y_max)
     if n_results > 1:
         ax_dist.set_xlim(0)
@@ -471,61 +479,61 @@ def ROC_curve(result_pairs, n_cuts=100, alpha=0.5, observables="",
     return fig
 
 
-def ROC_displacement(labels, labels_pred, *train_results, n_cuts=100,
-                     return_max=False, text="Observable", fontsize=25):
-    
-    AMI.check_label_params(labels, labels_pred, *train_results)
-    
-    full_results = {'Test': (labels, labels_pred)}
-    if not train_results:
-        full_results['Train'] = train_results
-    
-    fig = plt.figure(figsize=(10.67,7.33))
-    ax = fig.add_axes([0,0,1,1])
-    
-    for key, type_results in full_results.items():
-        
-        ls = '-' if key == 'Test' else '--'
-        zorder = 2 if key == 'Test' else 1
-    
-        displacements = [(0,0),]
-        for p_cut in range(n_cuts+1):
-            cm = AME.confusion_matrix(*type_results, p_cut / 100.0)
-            x, y = AME.fpr(*cm), AME.recall(*cm)
-            disp = np.sqrt(0.5*(x**2 + y**2) - x*y)
-            disp *= 100 if (y >= x) else -100
-            displacements.append((p_cut/100, disp))
-
-        displacements = sorted(displacements, key=lambda xy: abs(xy[0]))
-        displacements.append((1,0))
-        if key == 'Test':
-            max_disp = max(displacements, key=lambda xy: abs(xy[1]))
-
-        ax.plot(*zip(*displacements), ls=ls, color='red',
-                label=key, zorder=zorder)
-    
-    ax.plot((0, 1), (0,0), ls='--', color='grey', zorder=0)
-    
-    ax.text(0.64, 0.85, 'Paramters:\n'+text.replace(' &',','),
-            fontsize=fontsize)  # 0.55, 0.85
-
-    ax.set_title("ROC Disp", fontsize=fontsize)
-    ax.set_ylabel("Guess Displacement (%)", fontsize=fontsize)
-    ax.set_ylim(0.0)
-    ax.set_xlabel("Probability Threshold [$P_{cut}$]", fontsize=fontsize)
-    ax.set_xlim(-0.01, 1.01)
-    ax.tick_params(axis='both', labelsize=fontsize)
-    ax.legend(loc="lower right", fontsize=fontsize)
-    
-    
-    if return_max == True:
-        return fig, max_disp
-    return fig
+# def ROC_displacement(labels, labels_pred, *train_results, n_cuts=100,
+#                      return_max=False, text="Observable", fontsize=25):
+#
+#     AMI.check_label_params(labels, labels_pred, *train_results)
+#
+#     full_results = {'Test': (labels, labels_pred)}
+#     if not train_results:
+#         full_results['Train'] = train_results
+#
+#     fig = plt.figure(figsize=(10.67,7.33))
+#     ax = fig.add_axes([0,0,1,1])
+#
+#     for key, type_results in full_results.items():
+#
+#         ls = '-' if key == 'Test' else '--'
+#         zorder = 2 if key == 'Test' else 1
+#
+#         displacements = [(0,0),]
+#         for p_cut in range(n_cuts+1):
+#             cm = AME.confusion_matrix(*type_results, p_cut / 100.0)
+#             x, y = AME.fpr(*cm), AME.recall(*cm)
+#             disp = np.sqrt(0.5*(x**2 + y**2) - x*y)
+#             disp *= 100 if (y >= x) else -100
+#             displacements.append((p_cut/100, disp))
+#
+#         displacements = sorted(displacements, key=lambda xy: abs(xy[0]))
+#         displacements.append((1,0))
+#         if key == 'Test':
+#             max_disp = max(displacements, key=lambda xy: abs(xy[1]))
+#
+#         ax.plot(*zip(*displacements), ls=ls, color='red',
+#                 label=key, zorder=zorder)
+#
+#     ax.plot((0, 1), (0,0), ls='--', color='grey', zorder=0)
+#
+#     ax.text(0.64, 0.85, 'Paramters:\n'+text.replace(' &',','),
+#             fontsize=fontsize)  # 0.55, 0.85
+#
+#     ax.set_title("ROC Disp", fontsize=fontsize)
+#     ax.set_ylabel("Guess Displacement (%)", fontsize=fontsize)
+#     ax.set_ylim(0.0)
+#     ax.set_xlabel("Probability Threshold [$P_{cut}$]", fontsize=fontsize)
+#     ax.set_xlim(-0.01, 1.01)
+#     ax.tick_params(axis='both', labelsize=fontsize)
+#     ax.legend(loc="lower right", fontsize=fontsize)
+#
+#
+#     if return_max == True:
+#         return fig, max_disp
+#     return fig
 
 
 def SNRatio(result_pairs, n_thresholds=100, leaves_thresholds=False,
             p_threshold=0.5, observables="", fontsize=25, xlabelpad=5,
-            ylabelpad=0, **plotstyles):
+            ylabelpad=0, x_range=None, **plotstyles):
     """Plots the Signal-to-Noise Ratio curve of the classifiers predicted \
     results.
     
@@ -562,7 +570,10 @@ def SNRatio(result_pairs, n_thresholds=100, leaves_thresholds=False,
     n_results = len(result_pairs)
 
     # Create probability threshold range
-    p_cuts = np.linspace(0, 1, n_thresholds+1)
+    x0, x1 = 0.0, 1.0
+    if x_range is not None:
+        x0, x1 = x_range
+    p_cuts = np.linspace(x0, x1, n_thresholds+1)
     if leaves_thresholds:
         
         # Iterate over all predicted values
@@ -630,7 +641,8 @@ def SNRatio(result_pairs, n_thresholds=100, leaves_thresholds=False,
                            dashes=leaves_ls, zorder=0)
             
     # Set the axes limits
-    ax.set_xlim(-0.001, 1.001)
+    if x_range is not None: ax.set_xlim(*tuple(x_range))
+    else: ax.set_xlim(-0.001, 1.001)
     ax.set_ylim(0.0)
 
     # Draw figure to get ticks and ticklabels
@@ -659,7 +671,8 @@ def SNRatio(result_pairs, n_thresholds=100, leaves_thresholds=False,
     ax.legend(loc="lower right", prop=prop, framealpha=0.8)
     
     # Set the axes limits
-    ax.set_xlim(-0.001, 1.001)
+    if x_range is not None: ax.set_xlim(*tuple(x_range))
+    else: ax.set_xlim(-0.001, 1.001)
     ax.set_ylim(0.0)
     
     # Return figure

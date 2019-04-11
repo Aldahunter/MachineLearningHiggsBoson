@@ -1,8 +1,8 @@
 import numpy as np
 import sklearn.metrics as skmetrics
-from scipy.optimize import minimize_scalar
 
 import analysis.misc as AMI
+
 
 ### Functions ###
 def sk_confusion_matrix(labels, labels_predicted, p_threshold=0.5):
@@ -98,13 +98,20 @@ def S_B_ratio(es_labels, eb_labels_pred, p_threshold=0.5):
     return sb_ratio
 
 
-def rms_deviation(labels, labels_pred, *extra_results, n_bins=50):
+def rms_deviation(labels, labels_pred, *extra_results, n_bins=50,
+                  x_range=None):
     AMI._check_results_dims(labels, labels_pred, *extra_results)
     
     results = {0: (labels, labels_pred)}
     results.update({n:(l, l_p)
                     for n, (l, l_p) in enumerate(zip(extra_results[0::2],
                                                  extra_results[1::2]), 1)})
+    
+    # Get bins (representative of all data, if n_bins is auto)
+    bins = np.histogram_bin_edges(np.concatenate([type_results[1]
+                                                  for type_results
+                                                  in results.values()]),
+                                  bins=n_bins, range=x_range)
     
     histograms = {}
     for n, (is_signal, signal_prob) in results.items():
@@ -113,7 +120,6 @@ def rms_deviation(labels, labels_pred, *extra_results, n_bins=50):
         _results = {'s': signal_prob[is_signal == True],
                     'b': signal_prob[is_signal == False]}
 
-        bins = np.linspace(0, 1, n_bins + 1)
         histogram = {'s': np.histogram(_results['s'], bins)[0],
                      'b': np.histogram(_results['b'], bins)[0]}
         
@@ -125,7 +131,7 @@ def rms_deviation(labels, labels_pred, *extra_results, n_bins=50):
         
     rmsq = {}
     for sb in ['b', 's']:
-        sq_deviation = 0
+        sq_deviation = 0.0
         for n, histogram in histograms.items():
             if n == 0: continue
             sq_deviation += (histogram[sb] - histograms[0][sb])**2
@@ -134,7 +140,7 @@ def rms_deviation(labels, labels_pred, *extra_results, n_bins=50):
     return rmsq
 
 
-def get_scores(results_dict, p_threshold=0.5, n_bins=50):
+def get_scores(results_dict, p_threshold=0.5, n_bins=50, x_range=None):
     
     # Check results dictionary
     AMI._check_results_dict(results_dict)
@@ -156,6 +162,6 @@ def get_scores(results_dict, p_threshold=0.5, n_bins=50):
     scores["s/b"] = S_B_ratio(scores["tpr"], scores["fpr"], p_threshold)
     if len(results_dict) > 1:
         scores["rmsd"] = rms_deviation(*sum(results_dict.values(), ()),
-                                       n_bins=n_bins)
+                                       n_bins=n_bins, x_range=x_range)
     
     return scores

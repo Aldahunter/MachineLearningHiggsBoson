@@ -1,17 +1,17 @@
 ### Functions ###
-def gini_impurity(class_sizes, total_size):
+def gini_impurity(class_weights, total_weight):
     
-    # Set total impurity to 1.
-    G = 1.0
+    # Set sum_square_weight to 0.
+    sum_square_weight = 0.0
     
     # Iteratively minus each class' impurity from the total.
-    for class_size in class_sizes:
+    for class_weight in class_weights:
         
         # Class' impurity is square of fraction of class in total .
-        G -= (class_size / total_size)**2
+        sum_square_weight += class_weight**2
     
     # Return total impurity.
-    return G
+    return 1.0 - sum_square_weight / total_weight**2
 
-def entropy_impurity(class_sizes, total_size):
+def entropy_impurity(class_weights, total_weight):
     pass

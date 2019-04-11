@@ -1,16 +1,15 @@
 import collections
-import pandas as pd
 from random import seed
 from timeit import Timer
+
 from humanfriendly import format_timespan
 
-import dwrangling as DW
-import dwrangling.dataframes as DWDF
-import dwrangling.pipelines as DWP
-from trees._BaseClasses import BaseClassifier
 import analysis.metrics as AME
 import analysis.plotting as AP
 import analysis.plotting.clout as APC
+import dwrangling.dataframes as DWDF
+import dwrangling.pipelines as DWP
+from trees._BaseClasses import BaseClassifier
 
 
 # Create Class for Ordering Results #
@@ -25,7 +24,8 @@ class OrderedDict(collections.OrderedDict):
         
 ### Functions ###
 def analyse_classifier(collision, classifier, fit_kwargs, predict_kwargs,
-                     train_frac=0.8, val_frac=0.75, n_bins=100, rseed=None):
+                       train_frac=0.8, val_frac=0.75, n_bins='auto',
+                       x_range=None, rseed=None):
     """Trains and tests the classifer with the events data_df \
     panda.DataFrame (containing only the desired observables and signal \
     columns) using the given classifier_kwargs. Returns the classifier and \
@@ -73,36 +73,40 @@ def analyse_classifier(collision, classifier, fit_kwargs, predict_kwargs,
                                                        predictions['Train'],
                                                        **predict_kwargs)
     
-    results =OrderedDict((k,(labels[k],p)) for k,p in  predictions.items())
-    _results=OrderedDict((k,(labels[k],p)) for k,p in _predictions.items())
+    results =OrderedDict((k,(labels[k],p))for k,p in  predictions.items())
+    if isinstance(classifier, BaseClassifier):
+        _results=OrderedDict((k,(labels[k],p))
+                                          for k,p in _predictions.items())
     
     
     txt=' Analysing Classifier Probabilities ';print(f"{txt:=^90}",end='\n')
     if not isinstance(classifier, BaseClassifier):
-        p_threshold = AME.find_p_threshold(*_predictions['Validate'])
+        p_threshold = AME.find_p_threshold(*results['Validate'])
     else:
         p_threshold = classifier.threshold
     
-    scores = AME.get_scores(results, p_threshold=p_threshold, n_bins=n_bins)
+    scores = AME.get_scores(results, p_threshold, n_bins, x_range)
     txt = ' Results '; print(f'{txt:-^90}')
     print(f"Probability Threshold: {p_threshold}")
     for k, v in scores.items(): print(k,':',v)
 
+    scores['p_thres'] = p_threshold
+    
     if isinstance(classifier, BaseClassifier):
-        _scores = AME.get_scores(_results, p_threshold, n_bins)
+        _scores = AME.get_scores(_results, p_threshold, n_bins, x_range)
         txt = ' Classified Results '; print(f'{txt:~^90}')
         for k in ['auc', 'rmsd']:
             print(k,':',_scores[k])
             scores[k+'_prob'] = _scores[k]
+        
+        results.update({'_'+k:v for k, v in _results.items()})
     
-    scores['p_thres'] = p_threshold
-    results.update({'_'+k:v for k, v in _results.items()})
     return classifier, results, scores
 
 
-def plot_classifier(classifier, results, p_thres=0.5, cmap=None, cmid=None,
-                    labels="", n_bins=100, snr_resolution=200, leaves=False,
-                    hist=False, y_max=None):
+def plot_classifier(classifier, results, p_thres=0.5, hist=False, cmap=None,
+                    labels="", n_bins='auto', snr_resolution=200, cmid=None,
+                    cm_pos=(0,0), leaves=False, y_max=None, x_range=None):
     """Analyses the given classifer with the panda.DataFrame events, using \
     the input_observables and classifier_kwargs."""
     
@@ -117,11 +121,12 @@ def plot_classifier(classifier, results, p_thres=0.5, cmap=None, cmid=None,
     cmap = cmap if cmap else AP.std_cmap.copy().set_middle(False)
     if not isinstance(cmap, AP.StdCmap): cmap = AP.StdCmap(cmap)
     
-    def plot(): APC.plot_confusion_matrix(*results['Test'], p_thres,
-                                          cmap=cmap)
-    t = Timer(plot).timeit(1)
-    txt = ' Confusion Matrix '; print(f'{txt:-^90}')
-    print('Time Taken:', format_timespan(t, detailed=True))
+    if cm_pos is None:
+        def plot(): APC.plot_confusion_matrix(*results['Test'], p_thres,
+                                              cmap=cmap)
+        t = Timer(plot).timeit(1)
+        txt = ' Confusion Matrix '; print(f'{txt:-^90}')
+        print('Time Taken:', format_timespan(t, detailed=True))
     
     
     cmap = cmap.copy().set_middle(True, cmid) if cmid else cmap
@@ -139,7 +144,7 @@ def plot_classifier(classifier, results, p_thres=0.5, cmap=None, cmid=None,
     
     def plot(): APC.SNRatio(results, leaves_thresholds=leaves, cmap=cmap,
                             n_thresholds=snr_resolution, square='back',
-                            p_threshold=p_thres)
+                            p_threshold=p_thres, x_range=x_range)
     t = Timer(plot).timeit(1)
     txt = ' SNR Curve '; print(f'{txt:-^90}')
     print('Time Taken:', format_timespan(t, detailed=True))
@@ -151,41 +156,40 @@ def plot_classifier(classifier, results, p_thres=0.5, cmap=None, cmid=None,
         txt = ' SNR Curve '; print(f'{txt:~^90}')
         print('Time Taken:', format_timespan(t, detailed=True))
     
-    
-    for key, value in results.items():
-        if key != 'Test': results.rename(key, '['+key+']')
-    for key, value in _results.items():
-        if key != 'Test': _results.rename(key, '['+key+']')
-    
     def plot(): APC.plot_results(classifier,results, p_threshold=p_thres,
                                  hist=hist, n_bins=n_bins, cm_scale=1,
-                                 observables=labels, y_max=y_max[0])
+                                 observables=labels, y_max=y_max[0],
+                                 x_range=x_range, cm_pos=cm_pos)
     t = Timer(plot).timeit(1)
     txt = ' Histogram Distribution '; print(f'{txt:-^90}')
     print('Time Taken:', format_timespan(t, detailed=True))
     if _results:
         def plot(): APC.plot_results(classifier, _results, hist=True,
                                      p_threshold=p_thres, cm_scale=1,
-                                     observables=labels, y_max=y_max[-1])
+                                     observables=labels, y_max=y_max[-1],
+                                     x_range=(0.0, 1.0))
         t = Timer(plot).timeit(1)
         txt = ' Histogram Distribution '; print(f'{txt:~^90}')
         print('Time Taken:', format_timespan(t, detailed=True))
 
 
-def analyse(collision, classifier, fit_kwargs={}, predict_kwargs={},
-            train_frac=0.8, val_frac=0.75, n_bins=100, cmap=None, cmid=None,
-            labels="", leaves=False, hist=False, y_max=None, rseed=None,
-            snr_resolution=200):
+def analyse(collision, classifier, fit_kwargs=None, predict_kwargs=None,
+            train_frac=0.8, val_frac=0.75, n_bins='auto', cmap=None,
+            cmid=None, labels="", leaves=False, hist=False, y_max=None,
+            cm_pos=(0,0), x_range=None, rseed=None, snr_resolution=200):
     
+    if predict_kwargs is None: predict_kwargs = {}
+    if fit_kwargs is None: fit_kwargs = {}
+
     classifier, results, scores = analyse_classifier(collision, classifier,
                                                      fit_kwargs,
                                                      predict_kwargs,
                                                      train_frac, val_frac,
-                                                     n_bins, rseed)
+                                                     n_bins, x_range, rseed)
     
-    plot_classifier(classifier, results, scores['p_thres'], cmap, cmid,
-                    labels, n_bins, snr_resolution, leaves, hist, y_max)
-                    
+    plot_classifier(classifier, results, scores['p_thres'], hist, cmap,
+                    labels, n_bins, snr_resolution, cmid, cm_pos, leaves,
+                    y_max, x_range)
     
     return results, scores
 
